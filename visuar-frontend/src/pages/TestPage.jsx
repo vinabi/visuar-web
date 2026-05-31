@@ -28,6 +28,7 @@ import {
   getVisionFocus,
   setVisionFocus,
   buildAssessmentPlan,
+  buildQuickScreenerPlan,
   resolveFocusAfterScreener,
   getStepViewingMode,
 } from "../utils/visionFocus";
@@ -76,6 +77,7 @@ import {
   formatFaintestContrastRead,
 } from "../utils/contrastResults";
 import { persistTestResult } from "../utils/lastTestResult";
+import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
 const IMPLEMENTED_TESTS = [
   "snellen-acuity",
@@ -91,6 +93,7 @@ const IMPLEMENTED_TESTS = [
   "refraction-simulator",
   "astigmatism-fan",
   "complete",
+  "quick-screener",
 ];
 
 // ─── Constants ───────────────────────────────────────────
@@ -106,35 +109,54 @@ function mapNumericConfidence(pct) {
   return CONFIDENCE.LOW;
 }
 
+const AI_ANALYSIS_TIMEOUT_MS = 20000;
+const SAVE_RESULTS_TIMEOUT_MS = 15000;
+
+const emptyAiPayload = () => ({
+  ai_findings: null,
+  ai_recommendations: null,
+  ai_summary: null,
+  aiAnalysis: { findings: [], recommendations: [], summary: "" },
+});
+
 const fetchAIAnalysis = async (testType, testData) => {
   try {
     const context = { test_type: testType, ...testData };
-    const res = await fetch(`${API_URL}/api/analyze-results`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(context),
-    });
+    const res = await fetchWithTimeout(
+      `${API_URL}/api/analyze-results`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(context),
+      },
+      AI_ANALYSIS_TIMEOUT_MS
+    );
+    if (!res.ok) {
+      console.warn("[VISUAR] AI analysis HTTP", res.status);
+      return emptyAiPayload();
+    }
     const ai = await res.json();
     return {
-      // For DB storage (stringified)
       ai_findings: JSON.stringify(ai.findings || []),
       ai_recommendations: JSON.stringify(ai.recommendations || []),
       ai_summary: ai.summary || "",
-      // For display in results page (keep original)
       aiAnalysis: {
         findings: ai.findings || [],
         recommendations: ai.recommendations || [],
         summary: ai.summary || "",
+        summary_ur: ai.summary_ur || "",
+        screening: ai.screening,
+        safety_note_en: ai.safety_note_en,
+        safety_note_ur: ai.safety_note_ur,
       },
     };
   } catch (err) {
-    console.error("[VISUAR] AI analysis error:", err);
-    return {
-      ai_findings: null,
-      ai_recommendations: null,
-      ai_summary: null,
-      aiAnalysis: { findings: [], recommendations: [], summary: "" },
-    };
+    const isTimeout = err?.name === "AbortError";
+    console.error(
+      `[VISUAR] AI analysis ${isTimeout ? "timed out" : "error"}:`,
+      err
+    );
+    return emptyAiPayload();
   }
 };
 
@@ -172,6 +194,10 @@ export default function TestPage() {
   const isMobileOrTablet = useIsMobileOrTablet();
 
   const isCompleteAssessment = testId === "complete";
+  const isQuickScreener = testId === "quick-screener";
+  const isAssessmentFlow = isCompleteAssessment || isQuickScreener;
+  const refractionBatteryVariant =
+    getVisionFocus() === VISION_FOCUS.NEAR ? "near" : "far";
   const isSnellenTest = testId === "snellen-acuity";
   const isJaegerTest = testId === "jaeger-acuity";
   const isNearFarTest = testId === "near-far-switching";
@@ -197,9 +223,11 @@ export default function TestPage() {
     return saved ? "SETUP_CAMERA" : "SETUP_PPI";
   });
   const [visionFocusDraft, setVisionFocusDraft] = useState(() => getVisionFocus());
-  const [assessmentPlan, setAssessmentPlan] = useState(() =>
-    testId === "complete" ? buildAssessmentPlan(getVisionFocus()) : []
-  );
+  const [assessmentPlan, setAssessmentPlan] = useState(() => {
+    if (testId === "complete") return buildAssessmentPlan(getVisionFocus());
+    if (testId === "quick-screener") return buildQuickScreenerPlan();
+    return [];
+  });
   const [assessmentStepIndex, setAssessmentStepIndex] = useState(0);
   const [currentJaegerIndex, setCurrentJaegerIndex] = useState(0);
   const [jaegerResetToken, setJaegerResetToken] = useState(0);
@@ -267,18 +295,22 @@ export default function TestPage() {
 
   const showSnellenEngine =
     (isSnellenTest && snellenSubPhase === "acuity") ||
-    (isCompleteAssessment &&
+    (isAssessmentFlow &&
       (activeAssessmentStep === STEP.SNELLEN ||
         activeAssessmentStep === STEP.SCREENER_SNELLEN)) ||
     (isRefractionBattery && refractionSubPhase === "snellen");
   const showJaegerEngine =
     (isJaegerTest && jaegerSubPhase === "acuity") ||
-    (isCompleteAssessment &&
-      (activeAssessmentStep === STEP.JAEGER || activeAssessmentStep === STEP.SCREENER_JAEGER));
+    (isAssessmentFlow &&
+      (activeAssessmentStep === STEP.JAEGER || activeAssessmentStep === STEP.SCREENER_JAEGER)) ||
+    (isRefractionBattery && refractionSubPhase === "jaeger");
   const showNearFarEngine =
-    isNearFarTest || (isCompleteAssessment && activeAssessmentStep === STEP.NEAR_FAR);
+    isNearFarTest ||
+    (isAssessmentFlow && activeAssessmentStep === STEP.NEAR_FAR) ||
+    (isRefractionBattery && refractionSubPhase === "near_far");
   const showContrastInAssessment =
-    isContrastTest || (isCompleteAssessment && activeAssessmentStep === STEP.CONTRAST);
+    isContrastTest ||
+    (isAssessmentFlow && activeAssessmentStep === STEP.CONTRAST);
   const showOrientationInAssessment =
     isOrientationTest || (isCompleteAssessment && activeAssessmentStep === STEP.ORIENTATION);
   const showLandoltEngine = isLandoltTest;
@@ -328,10 +360,21 @@ export default function TestPage() {
       setViewingMode("near");
       return;
     }
-    if (!isCompleteAssessment || !activeAssessmentStep) return;
+    if ((!isAssessmentFlow && !isRefractionBattery) || (!activeAssessmentStep && !isRefractionBattery)) {
+      if (!isRefractionBattery) return;
+    }
+    if (isRefractionBattery) {
+      if (refractionSubPhase === "jaeger" || refractionSubPhase === "near_far") {
+        setViewingMode(refractionSubPhase === "near_far" ? "alternating" : "near");
+      } else {
+        setViewingMode("distance");
+      }
+      return;
+    }
+    if (!activeAssessmentStep) return;
     const mode = getStepViewingMode(activeAssessmentStep);
     setViewingMode(mode === "alternating" ? "distance" : mode);
-  }, [isCompleteAssessment, isJaegerTest, activeAssessmentStep]);
+  }, [isAssessmentFlow, isJaegerTest, isRefractionBattery, activeAssessmentStep, refractionSubPhase]);
 
   // ─── Camera ──────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -671,7 +714,11 @@ export default function TestPage() {
     if (isDuochromeTest) setRefractionSubPhase("duochrome");
     else if (isRefractionSimulatorTest) setRefractionSubPhase("simulator");
     else if (isAstigmatismTest) setRefractionSubPhase("astigmatism");
-    else if (isRefractionBattery) setRefractionSubPhase("snellen");
+    else if (isRefractionBattery) {
+      setRefractionSubPhase(
+        getVisionFocus() === VISION_FOCUS.NEAR ? "jaeger" : "snellen"
+      );
+    }
   }, [isDuochromeTest, isRefractionSimulatorTest, isAstigmatismTest, isRefractionBattery]);
 
   const getRefractionInitialD = useCallback(
@@ -929,13 +976,38 @@ export default function TestPage() {
       setSnellenResetToken((t) => t + 1);
       levelResultFiredRef.current = false;
       snellenPauseCountRef.current = 0;
-      if (isRefractionBattery) setRefractionSubPhase("snellen");
+      if (isRefractionBattery) {
+        if (refractionSubPhase === "jaeger") {
+          setCurrentJaegerIndex(0);
+          setJaegerResetToken((t) => t + 1);
+        } else if (refractionSubPhase === "near_far") {
+          setNonSnellenResetToken((t) => t + 1);
+        }
+      }
+      setRefractionEngineKey((k) => k + 1);
+      setTestPhase("INSTRUCTION");
+    } else if (
+      isRefractionBattery &&
+      refractionBatteryVariant === "near" &&
+      refractionSubPhase === "astigmatism"
+    ) {
+      setTestingEye("left");
+      setCurrentLevelIndex(0);
+      setSnellenResetToken((t) => t + 1);
+      levelResultFiredRef.current = false;
+      setRefractionSubPhase("snellen");
       setRefractionEngineKey((k) => k + 1);
       setTestPhase("INSTRUCTION");
     } else {
       finalizeRefractionResults();
     }
-  }, [testingEye, isRefractionBattery, finalizeRefractionResults]);
+  }, [
+    testingEye,
+    isRefractionBattery,
+    refractionBatteryVariant,
+    refractionSubPhase,
+    finalizeRefractionResults,
+  ]);
 
   const handleDuochromeComplete = useCallback(
     (result) => {
@@ -1094,7 +1166,42 @@ export default function TestPage() {
       payload.visionFocus = visionFocus;
       payload.diopterDisclaimer = DIOPTER_ESTIMATE_DISCLAIMER;
 
-      const aiData = await fetchAIAnalysis(
+      const saveBody = {
+        test_type: testId || "snellen-acuity",
+        left_eye_acuity: payload.leftEye?.acuity || null,
+        right_eye_acuity: payload.rightEye?.acuity || null,
+        left_eye_diopter: payload.leftEye?.diopter || null,
+        right_eye_diopter: payload.rightEye?.diopter || null,
+        overall_score: overallScore,
+        ai_findings: null,
+        ai_recommendations: null,
+        ai_summary: null,
+      };
+
+      const saveRes = await fetchWithTimeout(
+        `${API_URL}/api/test-results`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify(saveBody),
+        },
+        SAVE_RESULTS_TIMEOUT_MS
+      );
+      if (!saveRes.ok) {
+        const errBody = await saveRes.json().catch(() => ({}));
+        console.error(`[VISUAR] Save failed ${saveRes.status}:`, errBody);
+        alert(`Warning: results could not be saved to your history (${saveRes.status}). Check that you are signed in.`);
+      } else {
+        const saved = await saveRes.json().catch(() => null);
+        if (saved?.id) payload.savedResultId = saved.id;
+        console.log("[VISUAR] Snellen results saved to DB.");
+      }
+
+      // Gemini runs in background — never block the saving overlay on LLM latency
+      fetchAIAnalysis(
         "screening",
         buildGeminiScreeningPayload(finalEstimate, {
           overall_score: overallScore,
@@ -1113,42 +1220,27 @@ export default function TestPage() {
             consistencyScore: payload.consistencyScore ?? 100,
           },
         })
-      );
-
-      payload.aiAnalysis = aiData.aiAnalysis;
-
-      const saveRes = await fetch(`${API_URL}/api/test-results`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          test_type: testId || "snellen-acuity",
-          left_eye_acuity: payload.leftEye?.acuity || null,
-          right_eye_acuity: payload.rightEye?.acuity || null,
-          left_eye_diopter: payload.leftEye?.diopter || null,
-          right_eye_diopter: payload.rightEye?.diopter || null,
-          overall_score: overallScore,
-          ai_findings: aiData.ai_findings,
-          ai_recommendations: aiData.ai_recommendations,
-          ai_summary: aiData.ai_summary,
-        }),
-      });
-      if (!saveRes.ok) {
-        const errBody = await saveRes.json().catch(() => ({}));
-        console.error(`[VISUAR] Save failed ${saveRes.status}:`, errBody);
-        alert(`Warning: results could not be saved to your history (${saveRes.status}). Check that you are signed in.`);
-      } else {
-        console.log("[VISUAR] Snellen results saved to DB.");
-      }
+      )
+        .then((aiData) => {
+          payload.aiAnalysis = aiData.aiAnalysis;
+        })
+        .catch(() => {});
     } catch (err) {
-      console.error("[VISUAR] Failed to save results:", err);
-      alert("Warning: results could not be saved — backend may be offline.");
+      const isTimeout = err?.name === "AbortError";
+      console.error(
+        `[VISUAR] Failed to save results${isTimeout ? " (timed out)" : ""}:`,
+        err
+      );
+      alert(
+        isTimeout
+          ? "Saving took too long — your results are still shown on the next screen. Check your connection and try again from the dashboard."
+          : "Warning: results could not be saved — backend may be offline."
+      );
     }
-  }, [session, testId, correctionMode, offerResultsWithSessionSummary]);
+  }, [session, testId, correctionMode]);
 
   const finalizeStandaloneSnellenResults = useCallback(async () => {
+    if (finishingRef.current) return;
     finishingRef.current = true;
     setIsSaving(true);
 
@@ -1188,8 +1280,12 @@ export default function TestPage() {
       responseTimes,
       levelProgression: snellenLevelProgressionRef.current,
     };
-    await saveResultsToDB(payload);
-    offerResultsWithSessionSummary(`/results/${testId || "snellen-acuity"}`, payload);
+
+    try {
+      await saveResultsToDB(payload);
+    } finally {
+      offerResultsWithSessionSummary(`/results/${testId || "snellen-acuity"}`, payload);
+    }
   }, [buildEyeRxFromBuffer, saveResultsToDB, offerResultsWithSessionSummary, testId]);
 
   const finalizeStandaloneJaegerResults = useCallback(async () => {
@@ -1339,9 +1435,31 @@ export default function TestPage() {
     navigate("/results/complete", { state: payload });
   }, [session, navigate, stopCamera, correctionMode]);
 
+  const finishQuickScreenerRouting = useCallback(() => {
+    const resolved = resolveFocusAfterScreener({
+      snellenPassed: screenerRef.current.snellenPassed,
+      jaegerPassed: screenerRef.current.jaegerPassed,
+    });
+    setVisionFocus(resolved);
+    setSessionVisionFocus(resolved);
+    sessionStorage.setItem("visuar_focus_confirmed", "1");
+    stopCamera();
+    navigate("/test-selection");
+  }, [navigate, stopCamera]);
+
   const advanceAssessmentStep = useCallback(() => {
     const step = assessmentPlan[assessmentStepIndex];
     if (step === STEP.SCREENER_JAEGER && getVisionFocus() === VISION_FOCUS.UNSURE) {
+      if (isQuickScreener) {
+        const next = assessmentStepIndex + 1;
+        if (next < assessmentPlan.length && assessmentPlan[next] === STEP.CONTRAST) {
+          setAssessmentStepIndex(next);
+          resetForNextAssessmentStep();
+          return;
+        }
+        finishQuickScreenerRouting();
+        return;
+      }
       const resolved = resolveFocusAfterScreener({
         snellenPassed: screenerRef.current.snellenPassed,
         jaegerPassed: screenerRef.current.jaegerPassed,
@@ -1366,6 +1484,8 @@ export default function TestPage() {
     assessmentStepIndex,
     finalizeCompleteAssessment,
     resetForNextAssessmentStep,
+    isQuickScreener,
+    finishQuickScreenerRouting,
   ]);
 
   // ─── Contrast test completion (per-eye) ───────────────
@@ -1500,6 +1620,13 @@ export default function TestPage() {
         return;
       }
 
+      if (isQuickScreener) {
+        finishingRef.current = false;
+        setIsSaving(false);
+        finishQuickScreenerRouting();
+        return;
+      }
+
       const visionFocus = getVisionFocus();
       appendScreeningResult(
         normalizeTestResultRecord({
@@ -1528,6 +1655,8 @@ export default function TestPage() {
       session,
       testingEye,
       isCompleteAssessment,
+      isQuickScreener,
+      finishQuickScreenerRouting,
       advanceAssessmentStep,
       offerResultsWithSessionSummary,
       correctionMode,
@@ -1717,11 +1846,20 @@ export default function TestPage() {
         leftEye: L,
         rightEye: R,
         landoltScore: overallScore,
-        leftAcuity: L.thresholdAcuity,
-        rightAcuity: R.thresholdAcuity,
-        leftDiopter: L.estimatedSphereD,
-        rightDiopter: R.estimatedSphereD,
-        thresholdAcuity: R.thresholdAcuity,
+        leftAcuity: L.snellen6 || L.thresholdAcuity,
+        rightAcuity: R.snellen6 || R.thresholdAcuity,
+        leftDecimal: L.decimalScore,
+        rightDecimal: R.decimalScore,
+        leftSnellen20: L.snellen20,
+        rightSnellen20: R.snellen20,
+        leftDiopter: L.estimatedDiopterD ?? L.estimatedSphereD,
+        rightDiopter: R.estimatedDiopterD ?? R.estimatedSphereD,
+        leftInterpretation: L.interpretation,
+        rightInterpretation: R.interpretation,
+        thresholdAcuity: R.snellen6 || R.thresholdAcuity,
+        thresholdDecimal: R.decimalScore,
+        thresholdSnellen20: R.snellen20,
+        interpretation: R.interpretation,
         accuracy: Math.round(((L.accuracy || 0) + (R.accuracy || 0)) / 2),
         avgResponseTime: Math.round(((L.avgResponseTime || 0) + (R.avgResponseTime || 0)) / 2),
         fastestResponse: Math.min(L.fastestResponse || 9999, R.fastestResponse || 9999),
@@ -1746,27 +1884,47 @@ export default function TestPage() {
             fatigue: mergedData.fatigueLevel,
             consistency_score: mergedData.consistencyScore,
             session_stability: mergedData.sessionStability,
-            left_eye: { acuity: L.thresholdAcuity, estimated_sphere_d: L.estimatedSphereD, landolt_score: L.landoltScore },
-            right_eye: { acuity: R.thresholdAcuity, estimated_sphere_d: R.estimatedSphereD, landolt_score: R.landoltScore },
+            left_eye: {
+              decimal: L.decimalScore,
+              snellen6: L.snellen6,
+              snellen20: L.snellen20,
+              estimated_sphere_d: L.estimatedDiopterD,
+              interpretation: L.interpretation,
+            },
+            right_eye: {
+              decimal: R.decimalScore,
+              snellen6: R.snellen6,
+              snellen20: R.snellen20,
+              estimated_sphere_d: R.estimatedDiopterD,
+              interpretation: R.interpretation,
+            },
           });
 
           aiAnalysis = aiData.aiAnalysis;
 
-          const saveRes = await fetch(`${API_URL}/api/test-results`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-            body: JSON.stringify({
-              test_type: "landolt-acuity",
-              overall_score: overallScore,
-              left_eye_acuity: L.thresholdAcuity,
-              right_eye_acuity: R.thresholdAcuity,
-              left_eye_diopter: L.estimatedSphereD,
-              right_eye_diopter: R.estimatedSphereD,
-              ai_findings: aiData.ai_findings,
-              ai_recommendations: aiData.ai_recommendations,
-              ai_summary: aiData.ai_summary,
-            }),
-          });
+          const saveRes = await fetchWithTimeout(
+            `${API_URL}/api/test-results`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: JSON.stringify({
+                test_type: "landolt-acuity",
+                overall_score: overallScore,
+                left_eye_acuity: String(L.decimalScore ?? ""),
+                right_eye_acuity: String(R.decimalScore ?? ""),
+                left_eye_diopter: L.estimatedDiopterD ?? L.estimatedSphereD,
+                right_eye_diopter: R.estimatedDiopterD ?? R.estimatedSphereD,
+                result_json: JSON.stringify({ left: L, right: R, merged: mergedData }),
+                ai_findings: aiData.ai_findings,
+                ai_recommendations: aiData.ai_recommendations,
+                ai_summary: aiData.ai_summary,
+              }),
+            },
+            SAVE_RESULTS_TIMEOUT_MS
+          );
           if (!saveRes.ok) {
             const errBody = await saveRes.json().catch(() => ({}));
             console.error(`[VISUAR] Landolt save failed ${saveRes.status}:`, errBody);
@@ -1905,6 +2063,18 @@ export default function TestPage() {
           acuity,
           snellenD: diopter,
         };
+        if (refractionBatteryVariant === "near" && refractionSubPhase === "snellen") {
+          if (testingEye === "left") {
+            setTestingEye("right");
+            setCurrentLevelIndex(0);
+            setSnellenResetToken((t) => t + 1);
+            levelResultFiredRef.current = false;
+            setTestPhase("INSTRUCTION");
+            return;
+          }
+          finalizeRefractionResults();
+          return;
+        }
         setRefractionSubPhase("duochrome");
         setRefractionEngineKey((k) => k + 1);
         return;
@@ -2006,6 +2176,9 @@ export default function TestPage() {
       saveResultsToDB,
       offerResultsWithSessionSummary,
       isRefractionBattery,
+      refractionBatteryVariant,
+      refractionSubPhase,
+      finalizeRefractionResults,
       isSnellenTest,
       isCompleteAssessment,
       activeAssessmentStep,
@@ -2029,6 +2202,28 @@ export default function TestPage() {
           return;
         }
         advanceAssessmentStep();
+        return;
+      }
+
+      if (isRefractionBattery && refractionSubPhase === "jaeger") {
+        refractionBufferRef.current[testingEye] = {
+          ...refractionBufferRef.current[testingEye],
+          acuity,
+          nearAcuity: acuity,
+          jaegerD: diopter,
+        };
+        if (testingEye === "left") {
+          setTestingEye("right");
+          setCurrentJaegerIndex(0);
+          setJaegerResetToken((t) => t + 1);
+          levelResultFiredRef.current = false;
+          setTestPhase("INSTRUCTION");
+          return;
+        }
+        setRefractionSubPhase("near_far");
+        setNonSnellenResetToken((t) => t + 1);
+        setTestingEye("left");
+        setTestPhase("INSTRUCTION");
         return;
       }
 
@@ -2093,6 +2288,8 @@ export default function TestPage() {
     [
       testingEye,
       isJaegerTest,
+      isRefractionBattery,
+      refractionSubPhase,
       isCompleteAssessment,
       activeAssessmentStep,
       advanceAssessmentStep,
@@ -2108,7 +2305,7 @@ export default function TestPage() {
       if (levelResultFiredRef.current) return;
       levelResultFiredRef.current = true;
 
-      if (isCompleteAssessment && activeAssessmentStep === STEP.SCREENER_JAEGER) {
+      if (isAssessmentFlow && activeAssessmentStep === STEP.SCREENER_JAEGER) {
         screenerRef.current.jaegerPassed = passed;
         advanceAssessmentStep();
         return;
@@ -2125,14 +2322,25 @@ export default function TestPage() {
         finishJaegerEye(levelIndex > 0 ? jaegerLevels[levelIndex - 1] : null);
       }
     },
-    [finishJaegerEye, isCompleteAssessment, activeAssessmentStep, advanceAssessmentStep, jaegerLevels]
+    [finishJaegerEye, isAssessmentFlow, activeAssessmentStep, advanceAssessmentStep, jaegerLevels]
   );
 
   const handleNearFarComplete = useCallback(
     (data) => {
-      if (isCompleteAssessment) {
-        completeResultsRef.current.nearFar = data;
+      if (isAssessmentFlow) {
+        if (isCompleteAssessment) completeResultsRef.current.nearFar = data;
         advanceAssessmentStep();
+        return;
+      }
+      if (isRefractionBattery) {
+        if (testingEye === "left") {
+          setTestingEye("right");
+          setNonSnellenResetToken((t) => t + 1);
+          setTestPhase("INSTRUCTION");
+          return;
+        }
+        setRefractionSubPhase("duochrome");
+        setRefractionEngineKey((k) => k + 1);
         return;
       }
       stopCamera();
@@ -2140,7 +2348,15 @@ export default function TestPage() {
         state: { nearFarData: data, timestamp: new Date().toISOString() },
       });
     },
-    [isCompleteAssessment, advanceAssessmentStep, navigate, stopCamera]
+    [
+      isAssessmentFlow,
+      isCompleteAssessment,
+      isRefractionBattery,
+      testingEye,
+      advanceAssessmentStep,
+      navigate,
+      stopCamera,
+    ]
   );
 
   // ─── Snellen level handler ────────────────────────────
@@ -2149,7 +2365,7 @@ export default function TestPage() {
       if (levelResultFiredRef.current) return;
       levelResultFiredRef.current = true;
 
-      if (isCompleteAssessment && activeAssessmentStep === STEP.SCREENER_SNELLEN) {
+      if (isAssessmentFlow && activeAssessmentStep === STEP.SCREENER_SNELLEN) {
         screenerRef.current.snellenPassed = passed;
         advanceAssessmentStep();
         return;
@@ -2172,7 +2388,7 @@ export default function TestPage() {
         finishEye(levelIndex > 0 ? snellenLevels[levelIndex - 1] : null);
       }
     },
-    [finishEye, testingEye, isCompleteAssessment, activeAssessmentStep, advanceAssessmentStep, snellenLevels]
+    [finishEye, testingEye, isAssessmentFlow, activeAssessmentStep, advanceAssessmentStep, snellenLevels]
   );
 
   // ─── Derived state ─────────────────────────────────────
@@ -2779,7 +2995,7 @@ export default function TestPage() {
             <div className={`flex-1 rounded-3xl shadow-xl flex flex-col items-center justify-center transition-colors overflow-hidden ${
               isDarkMode ? "bg-[#0d1117] border border-slate-800" : "bg-white border border-slate-200"
             }`}>
-              {isCompleteAssessment && testPhase === "TESTING" && (
+              {isAssessmentFlow && testPhase === "TESTING" && (
                 <AssessmentProgress
                   plan={assessmentPlan}
                   currentIndex={assessmentStepIndex}
@@ -2787,7 +3003,11 @@ export default function TestPage() {
                 />
               )}
               {isRefractionBattery && testPhase === "TESTING" && (
-                <RefractionBatteryProgress currentStep={refractionSubPhase} isDarkMode={isDarkMode} />
+                <RefractionBatteryProgress
+                  currentStep={refractionSubPhase}
+                  variant={refractionBatteryVariant}
+                  isDarkMode={isDarkMode}
+                />
               )}
               {showSnellenEngine && (
                 <SnellenEngine

@@ -60,9 +60,15 @@ Input:
 Context rules:
 - If correctionMode is "corrected", say the test was done with glasses or contacts.
 - If "uncorrected", say without glasses or contacts.
+- If visionFocus is "far", frame as distance blur tendency; minus sphere often relates to far blur in screening (not a diagnosis).
+- If visionFocus is "near", frame as near focus difficulty; plus sphere often relates to near blur in screening (not a diagnosis).
+- If visionFocus is "both", cover distance and near screening without claiming an exact prescription.
+- If visionFocus is "unsure", note tests were chosen after a short screener.
+- Use testsCompleted to mention which modules ran; do not invent tests not listed.
 - If single_test_warning is true, say the estimate is based on only one test.
 - If multiple tests in testsUsed, say confidence may be higher but still screening only.
 - If confidence is Low and tests disagree, suggest retesting or visiting an eye care professional.
+- Never say confirmed myopia, confirmed hyperopia, or exact prescription.
 """
 
 LEGACY_PROMPT = """\

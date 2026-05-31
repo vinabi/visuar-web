@@ -316,7 +316,8 @@ async def get_test_result_by_id(result_id: int, request: Request, db=Depends(get
 # --- AI ANALYSIS ENDPOINT ---
 @app.post("/api/analyze-results")
 async def analyze_results(data: dict):
-    return analyze_test_results(data)
+    # Run sync Gemini call off the event loop so saves/WS stay responsive
+    return await asyncio.to_thread(analyze_test_results, data)
 
 
 # =============================================================================

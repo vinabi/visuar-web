@@ -19,6 +19,7 @@ export const TEST_IDS = {
   NEAR_FAR: "near-far-switching",
   SUSTAINED: "sustained-focus",
   COMPLETE: "complete",
+  QUICK_SCREENER: "quick-screener",
 };
 
 /** Tests that require bare eyes (block if glasses detected). */
@@ -43,15 +44,30 @@ export const SECTION_TITLES = {
   [VISION_FOCUS.FAR]: "Distance Vision Tests",
   [VISION_FOCUS.NEAR]: "Near Vision Tests",
   [VISION_FOCUS.BOTH]: "Complete Vision Assessment",
-  [VISION_FOCUS.UNSURE]: "Vision Screening",
+  [VISION_FOCUS.UNSURE]: "Quick Vision Screener",
 };
 
-/**
- * planTier: which plan is required to run this test
- *   "free"  — available to all users
- *   "basic" — requires Basic ($5) or Pro ($10)
- *   "pro"   — requires Pro ($10) only
- */
+export const SECTION_SUBTITLES = {
+  [VISION_FOCUS.FAR]:
+    "Recommended for blurry board, TV, road signs, or far objects.",
+  [VISION_FOCUS.NEAR]:
+    "Recommended for blurry phone, book, laptop, or near reading.",
+  [VISION_FOCUS.BOTH]:
+    "Recommended when both distance and near vision feel unclear.",
+  [VISION_FOCUS.UNSURE]:
+    "We'll start with a short screener to recommend the right tests.",
+};
+
+export const FOCUS_ROUTING_COPY = {
+  [VISION_FOCUS.FAR]: "Distance focused tests selected based on your blur report.",
+  [VISION_FOCUS.NEAR]: "Near focused tests selected based on your blur report.",
+  [VISION_FOCUS.BOTH]: "Complete assessment selected because both near and far feel blurry.",
+  [VISION_FOCUS.UNSURE]: "We'll start with a short screener to recommend the right tests.",
+};
+
+export const SAFETY_COPY =
+  "Your selection helps us choose tests. It is not a diagnosis.";
+
 const ALL_TESTS = [
   {
     id: TEST_IDS.SNELLEN,
@@ -66,7 +82,7 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.JAEGER,
     title: "Jaeger Near Acuity",
-    description: "Reading chart at 60–80 cm for near blur screening.",
+    description: "Near reading chart at 40 to 50 cm for phone, book, and laptop blur.",
     duration: "4 min",
     badge: "Near vision",
     available: true,
@@ -115,10 +131,20 @@ const ALL_TESTS = [
   },
   {
     id: TEST_IDS.NEAR_FAR,
-    title: "Near-Far Switching",
-    description: "Near focus and accommodation support — not a direct diopter test.",
+    title: "Near Far Switching",
+    description: "Checks how quickly your eyes adjust between near and far focus.",
     duration: "4 min",
-    badge: "Near focus support",
+    badge: "Focus flexibility",
+    available: true,
+    category: "core",
+    planTier: "free",
+  },
+  {
+    id: TEST_IDS.QUICK_SCREENER,
+    title: "Quick Vision Screener",
+    description: "One distance and one near check to recommend distance, near, or complete tests.",
+    duration: "3 min",
+    badge: "Screener",
     available: true,
     category: "core",
     planTier: "free",
@@ -198,63 +224,107 @@ const FAR_SUPPORTING = [TEST_IDS.CONTRAST, TEST_IDS.COLOR_VISION];
 const NEAR_MAIN = [
   TEST_IDS.JAEGER,
   TEST_IDS.NEAR_FAR,
-  TEST_IDS.SNELLEN,
   TEST_IDS.SIMULATOR,
+  TEST_IDS.DUOCHROME,
+  TEST_IDS.ASTIGMATISM,
   TEST_IDS.REFRACTION_BATTERY,
 ];
-const NEAR_SUPPORTING = [TEST_IDS.DUOCHROME];
+const NEAR_SUPPORTING = [
+  TEST_IDS.SNELLEN,
+  TEST_IDS.LANDOLT,
+  TEST_IDS.CONTRAST,
+  TEST_IDS.COLOR_VISION,
+];
 
 const BOTH_MAIN = [
   TEST_IDS.REFRACTION_BATTERY,
   TEST_IDS.SNELLEN,
-  TEST_IDS.LANDOLT,
   TEST_IDS.JAEGER,
+  TEST_IDS.LANDOLT,
   TEST_IDS.SIMULATOR,
   TEST_IDS.DUOCHROME,
   TEST_IDS.ASTIGMATISM,
   TEST_IDS.NEAR_FAR,
 ];
+const BOTH_SUPPORTING = [TEST_IDS.CONTRAST, TEST_IDS.COLOR_VISION];
+
+const UNSURE_SCREENER = [TEST_IDS.QUICK_SCREENER];
 
 export function getTestById(id) {
   return ALL_TESTS.find((t) => t.id === id);
+}
+
+function decorateBatteryTitle(test, focus) {
+  if (test.id !== TEST_IDS.REFRACTION_BATTERY) return test;
+  if (focus === VISION_FOCUS.NEAR) {
+    return {
+      ...test,
+      title: "Full Near Vision Battery",
+      description: "Jaeger, near–far switching, simulator, duochrome, and astigmatism fan for near blur.",
+    };
+  }
+  if (focus === VISION_FOCUS.FAR) {
+    return {
+      ...test,
+      title: "Full Distance Refraction Battery",
+      description:
+        "Snellen, refraction simulator, duochrome, and astigmatism fan for distance blur.",
+    };
+  }
+  if (focus === VISION_FOCUS.BOTH) {
+    return {
+      ...test,
+      title: "Full Refraction Battery",
+      description: "Distance and near modules for complete refractive screening.",
+    };
+  }
+  return test;
+}
+
+function pickTests(ids, focus) {
+  return ids
+    .map((id) => {
+      const t = getTestById(id);
+      if (!t) return null;
+      return decorateBatteryTitle(t, focus);
+    })
+    .filter(Boolean);
 }
 
 export function getTestsForFocus(focus) {
   const map = {
     [VISION_FOCUS.FAR]: { main: FAR_MAIN, supporting: FAR_SUPPORTING },
     [VISION_FOCUS.NEAR]: { main: NEAR_MAIN, supporting: NEAR_SUPPORTING },
-    [VISION_FOCUS.BOTH]: { main: BOTH_MAIN, supporting: [] },
-    [VISION_FOCUS.UNSURE]: { main: [], supporting: [] },
+    [VISION_FOCUS.BOTH]: { main: BOTH_MAIN, supporting: BOTH_SUPPORTING },
+    [VISION_FOCUS.UNSURE]: { main: UNSURE_SCREENER, supporting: [] },
   };
   const cfg = map[focus] || map[VISION_FOCUS.BOTH];
-  const pick = (ids) =>
-    ids.map((id) => {
-      const t = getTestById(id);
-      if (!t) return null;
-      if (focus === VISION_FOCUS.NEAR && id === TEST_IDS.REFRACTION_BATTERY) {
-        return { ...t, title: "Full Near Vision Battery", description: "Near-focused refraction battery for reading blur." };
-      }
-      if (focus === VISION_FOCUS.FAR && id === TEST_IDS.REFRACTION_BATTERY) {
-        return { ...t, title: "Full Distance Refraction Battery", description: "Distance-focused refraction battery for far blur." };
-      }
-      return t;
-    }).filter(Boolean);
 
   return {
     sectionTitle: SECTION_TITLES[focus] || SECTION_TITLES[VISION_FOCUS.BOTH],
-    mainTests: pick(cfg.main),
-    supportingTests: pick(cfg.supporting),
+    sectionSubtitle: SECTION_SUBTITLES[focus] || SECTION_SUBTITLES[VISION_FOCUS.BOTH],
+    routingCopy: FOCUS_ROUTING_COPY[focus] || FOCUS_ROUTING_COPY[VISION_FOCUS.BOTH],
+    mainTests: pickTests(cfg.main, focus),
+    supportingTests: pickTests(cfg.supporting, focus),
+  };
+}
+
+/** Browse cards when focus is unsure — distance and near catalogs side by side. */
+export function getUnsureBrowseSections() {
+  const far = getTestsForFocus(VISION_FOCUS.FAR);
+  const near = getTestsForFocus(VISION_FOCUS.NEAR);
+  return {
+    distance: { title: SECTION_TITLES[VISION_FOCUS.FAR], ...far },
+    nearVision: { title: SECTION_TITLES[VISION_FOCUS.NEAR], ...near },
   };
 }
 
 const PLAN_RANK = { free: 0, basic: 1, pro: 2 };
 
-/** Returns true if the given planId grants access to a test with planTier. */
 export function planUnlocksTest(planId, planTier) {
   return (PLAN_RANK[planId] ?? 0) >= (PLAN_RANK[planTier] ?? 0);
 }
 
-/** Human-readable plan name for upgrade prompts. */
 export const PLAN_LABELS = { free: "Free", basic: "Basic", pro: "Pro" };
 
 export function requiresBareEyes(testId) {
@@ -266,6 +336,14 @@ export function allowsGlassesWithWarning(testId) {
 }
 
 export function getRecommendedAssessmentPath(focus) {
-  if (focus === VISION_FOCUS.UNSURE) return `/test/${TEST_IDS.COMPLETE}`;
-  return `/test/${TEST_IDS.COMPLETE}`;
+  if (focus === VISION_FOCUS.UNSURE) return `/test/${TEST_IDS.QUICK_SCREENER}`;
+  if (focus === VISION_FOCUS.BOTH) return `/test/${TEST_IDS.COMPLETE}`;
+  return `/test/${TEST_IDS.REFRACTION_BATTERY}`;
+}
+
+export function getRecommendedAssessmentLabel(focus) {
+  if (focus === VISION_FOCUS.UNSURE) return "Start Quick Screener";
+  if (focus === VISION_FOCUS.BOTH) return "Start Complete Vision Assessment";
+  if (focus === VISION_FOCUS.NEAR) return "Start Full Near Vision Battery";
+  return "Start Full Distance Refraction Battery";
 }

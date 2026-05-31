@@ -15,7 +15,10 @@ import {
 } from "../utils/visionFocus";
 import {
   getTestsForFocus,
+  getUnsureBrowseSections,
   getRecommendedAssessmentPath,
+  getRecommendedAssessmentLabel,
+  SAFETY_COPY,
   TEST_IDS,
   planUnlocksTest,
   PLAN_LABELS,
@@ -23,7 +26,6 @@ import {
 import { startNewScreeningSession, setSessionVisionFocus } from "../utils/screeningSession";
 
 function TestCard({ test, isDarkMode, locked, requiredPlan }) {
-  // Coming-soon (not available and not just plan-locked)
   if (!test.available && !locked) {
     return (
       <div
@@ -43,7 +45,6 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
     );
   }
 
-  // Plan-locked
   if (locked) {
     const PlanIcon = requiredPlan === "pro" ? Crown : Zap;
     const planLabel = PLAN_LABELS[requiredPlan] || requiredPlan;
@@ -56,7 +57,6 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
             : "bg-white/90 border border-amber-200 hover:border-amber-400"
         }`}
       >
-        {/* Blurred content overlay */}
         <div className="blur-sm pointer-events-none select-none">
           <div className="flex items-center justify-between mb-3">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDarkMode ? "bg-slate-700" : "bg-slate-100"}`}>
@@ -73,8 +73,6 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
             {test.description}
           </p>
         </div>
-
-        {/* Lock badge */}
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/10 dark:bg-black/30 rounded-2xl">
           <div className={`p-3 rounded-full ${requiredPlan === "pro" ? "bg-amber-500/90" : "bg-cyan-600/90"}`}>
             <Lock className="w-5 h-5 text-white" />
@@ -85,15 +83,11 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
               {planLabel} plan required
             </span>
           </span>
-          <span className={`text-[11px] font-medium mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-            Tap to upgrade
-          </span>
         </div>
       </Link>
     );
   }
 
-  // Available
   return (
     <Link
       to={`/test/${test.id}`}
@@ -134,6 +128,26 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
   );
 }
 
+function TestGrid({ tests, isDarkMode, activePlanId }) {
+  if (!tests.length) return null;
+  return (
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+      {tests.map((test) => {
+        const locked = !planUnlocksTest(activePlanId, test.planTier || "free");
+        return (
+          <TestCard
+            key={test.id}
+            test={test}
+            isDarkMode={isDarkMode}
+            locked={locked}
+            requiredPlan={test.planTier}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function TestSelectionPage() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
@@ -143,11 +157,13 @@ export default function TestSelectionPage() {
   );
   const [focusDraft, setFocusDraft] = useState(getVisionFocus);
 
-  const { sectionTitle, mainTests, supportingTests } = getTestsForFocus(
-    phase === "tests" ? getVisionFocus() : focusDraft
-  );
+  const activeFocus = phase === "tests" ? getVisionFocus() : focusDraft;
+  const { sectionTitle, sectionSubtitle, routingCopy, mainTests, supportingTests } =
+    getTestsForFocus(activeFocus);
   const focus = getVisionFocus();
   const recommendedPath = getRecommendedAssessmentPath(focus);
+  const recommendedLabel = getRecommendedAssessmentLabel(focus);
+  const unsureBrowse = focus === VISION_FOCUS.UNSURE ? getUnsureBrowseSections() : null;
 
   const handleFocusContinue = () => {
     startNewScreeningSession({ visionFocus: focusDraft });
@@ -201,14 +217,20 @@ export default function TestSelectionPage() {
 
         {phase === "tests" && (
           <>
-            <div className="text-center mb-8">
+            <div className="text-center mb-6">
               <h1
                 className={`text-4xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}
               >
                 {sectionTitle}
               </h1>
               <p className={`text-lg ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                {t("testSelection.subtitle")}
+                {sectionSubtitle}
+              </p>
+              <p className={`mt-2 text-sm ${isDarkMode ? "text-cyan-400/90" : "text-cyan-700"}`}>
+                {routingCopy}
+              </p>
+              <p className={`mt-3 text-xs ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
+                {SAFETY_COPY}
               </p>
               <button
                 type="button"
@@ -226,32 +248,26 @@ export default function TestSelectionPage() {
                 }`}
               >
                 <p className={`mb-4 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                  Not sure where blur is worst? Start with a short screener (one Snellen row and one Jaeger line),
-                  then we will recommend distance, near, or complete tests.
+                  Start with one medium-distance acuity check and one near reading check. We will
+                  recommend distance, near, or complete tests based on your screening result.
                 </p>
-                <Link to={`/test/${TEST_IDS.COMPLETE}`}>
+                <Link to={`/test/${TEST_IDS.QUICK_SCREENER}`}>
                   <Button className="rounded-full bg-cyan-500 text-white px-8">
-                    Run short screener
+                    Start Quick Screener
                   </Button>
                 </Link>
               </div>
             )}
 
             {mainTests.length > 0 && (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-                {mainTests.map((test) => {
-                  const locked = !planUnlocksTest(activePlanId, test.planTier || "free");
-                  return (
-                    <TestCard
-                      key={test.id}
-                      test={test}
-                      isDarkMode={isDarkMode}
-                      locked={locked}
-                      requiredPlan={test.planTier}
-                    />
-                  );
-                })}
-              </div>
+              <>
+                <h2
+                  className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}
+                >
+                  {focus === VISION_FOCUS.UNSURE ? "Screener" : "Recommended Tests"}
+                </h2>
+                <TestGrid tests={mainTests} isDarkMode={isDarkMode} activePlanId={activePlanId} />
+              </>
             )}
 
             {supportingTests.length > 0 && (
@@ -259,40 +275,90 @@ export default function TestSelectionPage() {
                 <h2
                   className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}
                 >
-                  Supporting tests
+                  Supporting Tests
                 </h2>
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-                  {supportingTests.map((test) => {
-                    const locked = !planUnlocksTest(activePlanId, test.planTier || "free");
-                    return (
-                      <TestCard
-                        key={test.id}
-                        test={test}
-                        isDarkMode={isDarkMode}
-                        locked={locked}
-                        requiredPlan={test.planTier}
-                      />
-                    );
-                  })}
-                </div>
+                <TestGrid
+                  tests={supportingTests}
+                  isDarkMode={isDarkMode}
+                  activePlanId={activePlanId}
+                />
               </>
             )}
 
-            <div className="text-center">
-              <Link to={recommendedPath}>
-                <Button
-                  size="lg"
-                  className={`h-14 px-12 text-lg rounded-full text-white ${
-                    isDarkMode ? "bg-gradient-to-r from-cyan-500 to-cyan-600" : "bg-gradient-to-r from-cyan-500 to-blue-500"
-                  }`}
+            {unsureBrowse && (
+              <div className="mt-4 space-y-10">
+                <p
+                  className={`text-sm text-center ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}
                 >
-                  Start Recommended Assessment
-                </Button>
-              </Link>
-              <p className={`mt-4 text-sm ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                Best for a more reliable estimated eyesight number.
-              </p>
-            </div>
+                  Or browse tests by focus while you decide
+                </p>
+                {[
+                  { key: "distance", section: unsureBrowse.distance },
+                  { key: "near", section: unsureBrowse.nearVision },
+                ].map(({ key, section }) => (
+                  <div key={key}>
+                    <h2
+                      className={`text-lg font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}
+                    >
+                      {section.title}
+                    </h2>
+                    <p
+                      className={`text-sm mb-4 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}
+                    >
+                      {section.sectionSubtitle}
+                    </p>
+                    <h3
+                      className={`text-sm font-semibold uppercase tracking-wide mb-3 ${
+                        isDarkMode ? "text-slate-500" : "text-slate-500"
+                      }`}
+                    >
+                      Recommended Tests
+                    </h3>
+                    <TestGrid
+                      tests={section.mainTests}
+                      isDarkMode={isDarkMode}
+                      activePlanId={activePlanId}
+                    />
+                    {section.supportingTests.length > 0 && (
+                      <>
+                        <h3
+                          className={`text-sm font-semibold uppercase tracking-wide mb-3 ${
+                            isDarkMode ? "text-slate-500" : "text-slate-500"
+                          }`}
+                        >
+                          Supporting Tests
+                        </h3>
+                        <TestGrid
+                          tests={section.supportingTests}
+                          isDarkMode={isDarkMode}
+                          activePlanId={activePlanId}
+                        />
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {focus !== VISION_FOCUS.UNSURE && (
+              <div className="text-center">
+                <Link to={recommendedPath}>
+                  <Button
+                    size="lg"
+                    className={`h-14 px-12 text-lg rounded-full text-white ${
+                      isDarkMode
+                        ? "bg-gradient-to-r from-cyan-500 to-cyan-600"
+                        : "bg-gradient-to-r from-cyan-500 to-blue-500"
+                    }`}
+                  >
+                    {recommendedLabel}
+                  </Button>
+                </Link>
+                <p className={`mt-4 text-sm ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                  Best for a more reliable estimated eyesight number.
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>
