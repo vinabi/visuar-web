@@ -71,6 +71,10 @@ import {
   isQuickMode,
 } from "../utils/testStimuli";
 import {
+  computeJaegerEyeResult,
+  computeJaegerThresholdFromAttempt,
+} from "../utils/jaegerAcuity";
+import {
   contrastAbilityLabel,
   contrastReliabilityLabel,
   buildContrastPlainMeaning,
@@ -910,6 +914,8 @@ export default function TestPage() {
       singleTestWarning: finalEstimate.singleTestWarning,
     };
 
+    offerResultsWithSessionSummary(`/results/${tid}`, payload);
+
     if (session?.access_token) {
       try {
         const aiData = await fetchAIAnalysis("screening", buildGeminiScreeningPayload(finalEstimate, {
@@ -952,12 +958,12 @@ export default function TestPage() {
             ai_summary: aiData.ai_summary,
           }),
         });
+        const slug = tid;
+        if (slug) persistTestResult(slug, payload);
       } catch (err) {
         console.error("[VISUAR] Refraction save error:", err);
       }
     }
-
-    offerResultsWithSessionSummary(`/results/${tid}`, payload);
   }, [
     session,
     testId,
@@ -986,18 +992,6 @@ export default function TestPage() {
       }
       setRefractionEngineKey((k) => k + 1);
       setTestPhase("INSTRUCTION");
-    } else if (
-      isRefractionBattery &&
-      refractionBatteryVariant === "near" &&
-      refractionSubPhase === "astigmatism"
-    ) {
-      setTestingEye("left");
-      setCurrentLevelIndex(0);
-      setSnellenResetToken((t) => t + 1);
-      levelResultFiredRef.current = false;
-      setRefractionSubPhase("snellen");
-      setRefractionEngineKey((k) => k + 1);
-      setTestPhase("INSTRUCTION");
     } else {
       finalizeRefractionResults();
     }
@@ -1021,8 +1015,16 @@ export default function TestPage() {
       };
 
       if (isRefractionBattery) {
+        if (testingEye === "left") {
+          setTestingEye("right");
+          setRefractionEngineKey((k) => k + 1);
+          setTestPhase("INSTRUCTION");
+          return;
+        }
         setRefractionSubPhase("simulator");
+        setTestingEye("left");
         setRefractionEngineKey((k) => k + 1);
+        setTestPhase("INSTRUCTION");
         return;
       }
 
@@ -1050,8 +1052,16 @@ export default function TestPage() {
       };
 
       if (isRefractionBattery) {
+        if (testingEye === "left") {
+          setTestingEye("right");
+          setRefractionEngineKey((k) => k + 1);
+          setTestPhase("INSTRUCTION");
+          return;
+        }
         setRefractionSubPhase("astigmatism");
+        setTestingEye("left");
         setRefractionEngineKey((k) => k + 1);
+        setTestPhase("INSTRUCTION");
         return;
       }
 
@@ -1140,7 +1150,7 @@ export default function TestPage() {
         const axis = eyeData.axis ?? null;
         appendScreeningResult(
           normalizeTestResultRecord({
-            testName: "Eyesight Number Test",
+            testName: "Distance Eyesight Number Test",
             testId: "snellen-acuity",
             eye,
             visionFocus,
@@ -1288,27 +1298,42 @@ export default function TestPage() {
     }
   }, [buildEyeRxFromBuffer, saveResultsToDB, offerResultsWithSessionSummary, testId]);
 
+  const enrichJaegerEyePayload = useCallback((eye) => {
+    const buf = refractionBufferRef.current[eye] || {};
+    const rx = buildEyeRxFromBuffer(eye, "jaeger");
+    const threshold = computeJaegerEyeResult(buf.nearAcuity || buf.acuity);
+    return {
+      ...rx,
+      acuity: buf.jaegerJ || threshold?.displayAcuity || rx.acuity,
+      diopter: buf.snellenD ?? buf.jaegerD ?? threshold?.readingAddD ?? rx.diopter,
+      nearLevel: buf.nearAcuity || threshold?.level,
+      jaegerJ: buf.jaegerJ || threshold?.jLabel,
+      nearDecimal: buf.nearDecimal ?? threshold?.nearDecimal,
+      detailLabel: buf.jaegerDetail || threshold?.detailLabel,
+    };
+  }, [buildEyeRxFromBuffer]);
+
   const finalizeStandaloneJaegerResults = useCallback(async () => {
     finishingRef.current = true;
     setIsSaving(true);
     const visionFocus = getVisionFocus();
-    const leftEye = buildEyeRxFromBuffer("left", "jaeger");
-    const rightEye = buildEyeRxFromBuffer("right", "jaeger");
+    const leftEye = enrichJaegerEyePayload("left");
+    const rightEye = enrichJaegerEyePayload("right");
 
     ["left", "right"].forEach((eye) => {
       const eyeData = eye === "left" ? leftEye : rightEye;
       if (!eyeData?.acuity) return;
       appendScreeningResult(
         normalizeTestResultRecord({
-          testName: "Jaeger Near Acuity",
+          testName: "Near Eyesight Number Test",
           testId: "jaeger-acuity",
           eye,
           visionFocus,
           correctionMode,
-          rawResult: eyeData.acuity,
+          rawResult: eyeData.jaegerJ || eyeData.acuity,
           unit: "jaeger",
-          nearAcuity: eyeData.acuity,
-          estimatedSphereD: eyeData.sph,
+          nearAcuity: eyeData.nearLevel || eyeData.acuity,
+          estimatedSphereD: eyeData.diopter ?? eyeData.sph,
           estimatedCylinderD: eyeData.cyl,
           estimatedAxis: eyeData.axis,
           singleDiopterD: eyeData.singleDiopterD,
@@ -1324,7 +1349,7 @@ export default function TestPage() {
       correctionMode,
     };
     offerResultsWithSessionSummary("/results/jaeger-acuity", payload);
-  }, [buildEyeRxFromBuffer, correctionMode, offerResultsWithSessionSummary]);
+  }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary]);
 
   useEffect(() => {
     finalizeSnellenRef.current = finalizeStandaloneSnellenResults;
@@ -2063,20 +2088,18 @@ export default function TestPage() {
           acuity,
           snellenD: diopter,
         };
-        if (refractionBatteryVariant === "near" && refractionSubPhase === "snellen") {
-          if (testingEye === "left") {
-            setTestingEye("right");
-            setCurrentLevelIndex(0);
-            setSnellenResetToken((t) => t + 1);
-            levelResultFiredRef.current = false;
-            setTestPhase("INSTRUCTION");
-            return;
-          }
-          finalizeRefractionResults();
+        if (testingEye === "left") {
+          setTestingEye("right");
+          setCurrentLevelIndex(0);
+          setSnellenResetToken((t) => t + 1);
+          levelResultFiredRef.current = false;
+          setTestPhase("INSTRUCTION");
           return;
         }
         setRefractionSubPhase("duochrome");
+        setTestingEye("left");
         setRefractionEngineKey((k) => k + 1);
+        setTestPhase("INSTRUCTION");
         return;
       }
 
@@ -2187,12 +2210,37 @@ export default function TestPage() {
     ]
   );
 
+  const applyJaegerEyeResult = useCallback((lastPassedLevel, metrics) => {
+    const threshold =
+      metrics?.levelIndex != null
+        ? computeJaegerThresholdFromAttempt({
+            passed: metrics.passed,
+            levelIndex: metrics.levelIndex,
+            levels: jaegerLevels,
+            accuracyPercent: metrics.accuracyPercent,
+          }) ?? computeJaegerEyeResult(lastPassedLevel)
+        : computeJaegerEyeResult(lastPassedLevel);
+
+    const acuity = threshold?.displayAcuity ?? lastPassedLevel;
+    const diopter = threshold?.readingAddD ?? (lastPassedLevel ? computeDiopter(lastPassedLevel, "jaeger") : null);
+
+    return {
+      acuity,
+      diopter,
+      nearLevel: threshold?.level ?? lastPassedLevel,
+      jaegerJ: threshold?.jLabel,
+      nearDecimal: threshold?.nearDecimal,
+      detailLabel: threshold?.detailLabel,
+    };
+  }, [jaegerLevels, computeDiopter]);
+
   const finishJaegerEye = useCallback(
-    (acuity) => {
-      const diopter = acuity ? computeDiopter(acuity, "jaeger") : null;
+    (lastPassedLevel, metrics) => {
+      const rx = applyJaegerEyeResult(lastPassedLevel, metrics);
+      const { acuity, diopter, nearLevel, jaegerJ, nearDecimal, detailLabel } = rx;
 
       if (isCompleteAssessment && activeAssessmentStep === STEP.JAEGER) {
-        completeResultsRef.current.near[testingEye] = { acuity, diopter };
+        completeResultsRef.current.near[testingEye] = { acuity, diopter, nearLevel, jaegerJ, nearDecimal };
         if (testingEye === "left") {
           setTestingEye("right");
           setCurrentJaegerIndex(0);
@@ -2208,9 +2256,12 @@ export default function TestPage() {
       if (isRefractionBattery && refractionSubPhase === "jaeger") {
         refractionBufferRef.current[testingEye] = {
           ...refractionBufferRef.current[testingEye],
-          acuity,
-          nearAcuity: acuity,
+          acuity: nearLevel ?? acuity,
+          nearAcuity: nearLevel,
+          jaegerJ,
+          nearDecimal,
           jaegerD: diopter,
+          snellenD: refractionBufferRef.current[testingEye]?.snellenD ?? diopter,
         };
         if (testingEye === "left") {
           setTestingEye("right");
@@ -2230,7 +2281,11 @@ export default function TestPage() {
       if (isJaegerTest) {
         refractionBufferRef.current[testingEye] = {
           ...refractionBufferRef.current[testingEye],
-          acuity,
+          acuity: nearLevel ?? acuity,
+          nearAcuity: nearLevel,
+          jaegerJ,
+          nearDecimal,
+          jaegerDetail: detailLabel,
           snellenD: diopter,
         };
         if (testingEye === "left") {
@@ -2245,7 +2300,7 @@ export default function TestPage() {
         return;
       }
 
-      resultsRef.current[testingEye] = { acuity, diopter };
+      resultsRef.current[testingEye] = { acuity, diopter, nearLevel, jaegerJ, nearDecimal, detailLabel };
       if (testingEye === "left") {
         setTestingEye("right");
         setCurrentJaegerIndex(0);
@@ -2259,17 +2314,17 @@ export default function TestPage() {
         ["left", "right"].forEach((eye) => {
           const eyeData = resultsRef.current[eye];
           if (!eyeData?.acuity) return;
-          const sphereD = computeDiopter(eyeData.acuity, "jaeger");
+          const sphereD = eyeData.diopter ?? computeDiopter(eyeData.nearLevel || eyeData.acuity, "jaeger");
           appendScreeningResult(
             normalizeTestResultRecord({
-              testName: "Jaeger Near Acuity",
+              testName: "Near Eyesight Number Test",
               testId: "jaeger-acuity",
               eye,
               visionFocus,
               correctionMode,
-              rawResult: eyeData.acuity,
+              rawResult: eyeData.jaegerJ || eyeData.acuity,
               unit: "jaeger",
-              nearAcuity: eyeData.acuity,
+              nearAcuity: eyeData.nearLevel || eyeData.acuity,
               estimatedSphereD: sphereD,
               singleDiopterD: computeSingleDiopterD(sphereD, 0),
             })
@@ -2294,14 +2349,14 @@ export default function TestPage() {
       activeAssessmentStep,
       advanceAssessmentStep,
       offerResultsWithSessionSummary,
-      computeDiopter,
       correctionMode,
       beginAstigmatismPhase,
+      applyJaegerEyeResult,
     ]
   );
 
   const handleJaegerLevelResult = useCallback(
-    (passed, levelIndex) => {
+    (passed, levelIndex, metrics) => {
       if (levelResultFiredRef.current) return;
       levelResultFiredRef.current = true;
 
@@ -2311,15 +2366,26 @@ export default function TestPage() {
         return;
       }
 
+      const attemptMetrics = {
+        ...metrics,
+        passed,
+        levelIndex,
+        accuracyPercent: metrics?.accuracyPercent,
+      };
+
       if (passed) {
         if (levelIndex < jaegerLevels.length - 1) {
           levelResultFiredRef.current = false;
           setCurrentJaegerIndex(levelIndex + 1);
         } else {
-          finishJaegerEye(jaegerLevels[jaegerLevels.length - 1]);
+          finishJaegerEye(jaegerLevels[jaegerLevels.length - 1], attemptMetrics);
         }
       } else {
-        finishJaegerEye(levelIndex > 0 ? jaegerLevels[levelIndex - 1] : null);
+        finishJaegerEye(levelIndex > 0 ? jaegerLevels[levelIndex - 1] : null, {
+          ...attemptMetrics,
+          levelIndex,
+          passed: false,
+        });
       }
     },
     [finishJaegerEye, isAssessmentFlow, activeAssessmentStep, advanceAssessmentStep, jaegerLevels]
@@ -2688,6 +2754,31 @@ export default function TestPage() {
                 }
               }}
             />
+          </div>
+        )}
+
+        {isImplemented && testPhase === "SESSION_SUMMARY" && !sessionEstimate && pendingNavRef.current && (
+          <div
+            className={`flex-1 flex flex-col items-center justify-center backdrop-blur-md rounded-3xl shadow-xl p-8 ${
+              isDarkMode ? "bg-[#1a1f3a]/80 border border-slate-700/50" : "bg-white/80"
+            }`}
+          >
+            <h3 className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              Test complete
+            </h3>
+            <Button
+              className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8 h-12"
+              onClick={() => {
+                const nav = pendingNavRef.current;
+                if (nav) {
+                  const slug = nav.path.replace(/^\/results\//, "");
+                  if (slug) persistTestResult(slug, nav.state);
+                  navigate(nav.path, { state: nav.state });
+                }
+              }}
+            >
+              View results
+            </Button>
           </div>
         )}
 

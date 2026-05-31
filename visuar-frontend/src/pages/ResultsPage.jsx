@@ -457,8 +457,8 @@ export default function ResultsPage() {
   }
 
   const testTitles = {
-    "snellen-acuity": "Eyesight Number Test",
-    "jaeger-acuity": "Jaeger Near Acuity",
+    "snellen-acuity": "Distance Eyesight Number Test",
+    "jaeger-acuity": "Near Eyesight Number Test",
     "near-far-switching": "Near–Far Switching",
     complete: "Complete Vision Assessment",
     "contrast-sensitivity": "Contrast Sensitivity",
@@ -1262,7 +1262,7 @@ export default function ResultsPage() {
       {
         type: "info",
         title: "Screening estimate",
-        description: "Approximate diopter values combine Eyesight Number, duochrome, and refraction simulator when available. Not an exact prescription.",
+        description: "Approximate diopter values combine Distance Eyesight Number, duochrome, and refraction simulator when available. Not an exact prescription.",
       },
     ];
     const recs = [
@@ -1311,14 +1311,14 @@ export default function ResultsPage() {
       findings.push({
         type: "success",
         title: "Distance Acuity Recorded",
-        description: `Left ${dist.left || "—"}, Right ${dist.right || "—"} (Eyesight Number test at calibrated distance).`,
+        description: `Left ${dist.left || "—"}, Right ${dist.right || "—"} (Distance Eyesight Number test at calibrated distance).`,
       });
     }
     if (near.left || near.right) {
       findings.push({
         type: "success",
         title: "Near Acuity Recorded",
-        description: `Left ${near.left || "—"}, Right ${near.right || "—"} (Jaeger chart at 60–80 cm).`,
+        description: `Left ${near.left || "—"}, Right ${near.right || "—"} (Near Eyesight Number test at 60–80 cm).`,
       });
     }
     findings.push({
@@ -1363,20 +1363,36 @@ export default function ResultsPage() {
   // ── Jaeger near acuity ───────────────────────────────────
   if (isJaegerTest && resultState?.leftEye) {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
-    const la = resultState.leftEye?.acuity;
-    const ra = resultState.rightEye?.acuity;
+    const le = resultState.leftEye;
+    const re = resultState.rightEye;
+    const formatJaegerEye = (eye) => {
+      if (!eye?.acuity) return { main: "—", sub: "" };
+      const main = eye.jaegerJ || eye.acuity;
+      const sub =
+        eye.detailLabel ||
+        (eye.nearDecimal != null && eye.diopter != null
+          ? `${eye.nearLevel || ""} · near ${eye.nearDecimal} · +${Number(eye.diopter).toFixed(2)} D est.`
+          : "");
+      return { main, sub };
+    };
+    const left = formatJaegerEye(le);
+    const right = formatJaegerEye(re);
     return (
       <ResultsShell title={testTitles["jaeger-acuity"]} date={dateStr} isDarkMode={isDarkMode}>
         <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
-          <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}>Near reading acuity</h3>
+          <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+            Near Eyesight Number Test
+          </h3>
           <div className="grid md:grid-cols-2 gap-4">
             <div className={`p-4 rounded-xl ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
               <p className="text-sm text-slate-500">Left eye</p>
-              <p className="text-2xl font-black text-violet-500">{la || "—"}</p>
+              <p className="text-2xl font-black text-violet-500">{left.main}</p>
+              {left.sub && <p className={`text-xs mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{left.sub}</p>}
             </div>
             <div className={`p-4 rounded-xl ${isDarkMode ? "bg-slate-900" : "bg-white"}`}>
               <p className="text-sm text-slate-500">Right eye</p>
-              <p className="text-2xl font-black text-violet-500">{ra || "—"}</p>
+              <p className="text-2xl font-black text-violet-500">{right.main}</p>
+              {right.sub && <p className={`text-xs mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{right.sub}</p>}
             </div>
           </div>
         </div>
@@ -1387,7 +1403,14 @@ export default function ResultsPage() {
           title="Estimated prescription from this test"
         />
         <FindingsSection
-          findings={[{ type: "info", title: "Near vision screening", description: "Jaeger results reflect reading distance acuity at 60–80 cm. Confirm with a formal near vision test if symptoms persist." }]}
+          findings={[
+            {
+              type: "info",
+              title: "Near vision screening",
+              description:
+                "J-numbers and near decimal values are derived from the smallest row passed: decimal ≈ (8÷N)×(40÷distance cm). Reading add (+D) follows the near-decimal table — screening only, not a prescription.",
+            },
+          ]}
           recommendations={["Schedule an eye exam if near blur affects daily tasks.", "Ensure adequate lighting for close work."]}
         />
       </ResultsShell>
@@ -1506,24 +1529,24 @@ export default function ResultsPage() {
 
   const snellenFindings = hasReal
     ? buildSnellenFindings(leftAcuity, rightAcuity, leftDiopter, rightDiopter)
-    : [{ type: "info", title: "No Test Data", description: "Complete an Eyesight Number test to see your results here." }];
+    : [{ type: "info", title: "No Test Data", description: "Complete a Distance Eyesight Number test to see your results here." }];
   const snellenRecs = hasReal ? buildSnellenRecs(leftAcuity, rightAcuity, leftDiopter, rightDiopter) : [];
 
   if (!hasReal) {
     return (
-      <ResultsShell title="Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
+      <ResultsShell title="Distance Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
         <div className={`rounded-2xl p-10 mb-6 text-center ${isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200"}`}>
           <Eye className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
           <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
             No results yet
           </h2>
           <p className={`text-sm max-w-md mx-auto mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Finish an Eyesight Number test and tap <strong>View full result</strong> on the summary screen, or open a saved
+            Finish a Distance Eyesight Number test and tap <strong>View full result</strong> on the summary screen, or open a saved
             result from your dashboard history.
           </p>
           <Link to="/test/snellen-acuity">
             <Button className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8">
-              Start Eyesight Number test
+              Start Distance Eyesight Number test
             </Button>
           </Link>
         </div>
@@ -1533,7 +1556,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <ResultsShell title="Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
+    <ResultsShell title="Distance Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
       {/* Hero score */}
       <div className={`rounded-2xl p-6 mb-6 ${isDarkMode ? "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20" : "bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100"}`}>
         <div className="flex flex-col md:flex-row items-center gap-8">

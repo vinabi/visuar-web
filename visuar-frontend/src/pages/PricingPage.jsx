@@ -66,7 +66,7 @@ const FEATURES = [
     category: "Vision Testing",
   },
   {
-    label: "Eyesight Number & Contrast tests",
+    label: "Distance Eyesight Number & Contrast tests",
     free: true,
     basic: true,
     pro: true,

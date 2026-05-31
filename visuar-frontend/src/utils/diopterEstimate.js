@@ -7,6 +7,7 @@
 import { parseAcuityDecimal } from "./acuityUnits";
 import { formatPrescription } from "./refractionMath";
 import { computeSingleDiopterD } from "./finalEstimate";
+import { jaegerLevelToReadingAddD } from "./jaegerAcuity";
 
 export const DIOPTER_ESTIMATE_DISCLAIMER =
   "This diopter value is a software-based statistical estimate of your spherical vision. " +
@@ -62,14 +63,9 @@ export function estimateReadingAddDiopter(decimal) {
   return 2.5;
 }
 
-/** Jaeger N level (higher N = larger print = worse near acuity) → reading add. */
+/** Jaeger N / J level → reading add (+D) via near-decimal formula. */
 export function estimateReadingAddFromJaeger(jaegerLevel) {
-  const match = String(jaegerLevel ?? "").match(/^N(\d+)$/i);
-  const n = match ? parseInt(match[1], 10) : 12;
-  if (n <= 8) return 0;
-  if (n <= 12) return 1.125;
-  if (n <= 18) return 1.625;
-  return 2.25;
+  return jaegerLevelToReadingAddD(jaegerLevel);
 }
 
 /**
@@ -81,7 +77,7 @@ export function estimateReadingAddFromJaeger(jaegerLevel) {
 export function estimateDiopterFromResult({ acuity, unit = "decimal", forceNear = false }) {
   if (!acuity) return null;
 
-  if (unit === "jaeger" || /^N\d/i.test(String(acuity))) {
+  if (unit === "jaeger" || /^[JN]\d/i.test(String(acuity))) {
     return roundDiopter(estimateReadingAddFromJaeger(acuity));
   }
 
