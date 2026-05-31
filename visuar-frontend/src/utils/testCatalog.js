@@ -71,20 +71,20 @@ export const SAFETY_COPY =
 const ALL_TESTS = [
   {
     id: TEST_IDS.SNELLEN,
-    title: "Eyesight Number Test",
+    title: "Distance Eyesight Number Test",
     description: "Checks how clearly you see letters and estimates your eyesight number.",
     duration: "4 min",
-    badge: "Distance vision",
+    badge: "Recommended",
     available: true,
     category: "core",
     planTier: "free",
   },
   {
     id: TEST_IDS.JAEGER,
-    title: "Jaeger Near Acuity",
+    title: "Near Eyesight Number Test",
     description: "Near reading chart at 40 to 50 cm for phone, book, and laptop blur.",
     duration: "4 min",
-    badge: "Near vision",
+    badge: "Recommended",
     available: true,
     category: "core",
     planTier: "free",
@@ -122,7 +122,7 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.REFRACTION_BATTERY,
     title: "Full Refraction Battery",
-    description: "Eyesight Number, duochrome, simulator, and astigmatism fan combined.",
+    description: "Distance Eyesight Number, duochrome, simulator, and astigmatism fan combined.",
     duration: "12 min",
     badge: "Recommended",
     available: true,
@@ -260,7 +260,7 @@ function decorateBatteryTitle(test, focus) {
     return {
       ...test,
       title: "Full Near Vision Battery",
-      description: "Jaeger, near–far switching, simulator, duochrome, and astigmatism fan for near blur.",
+      description: "Near Eyesight Number, near–far switching, simulator, duochrome, and astigmatism fan for near blur.",
     };
   }
   if (focus === VISION_FOCUS.FAR) {
@@ -268,7 +268,7 @@ function decorateBatteryTitle(test, focus) {
       ...test,
       title: "Full Distance Refraction Battery",
       description:
-        "Eyesight Number, refraction simulator, duochrome, and astigmatism fan for distance blur.",
+        "Distance Eyesight Number, refraction simulator, duochrome, and astigmatism fan for distance blur.",
     };
   }
   if (focus === VISION_FOCUS.BOTH) {

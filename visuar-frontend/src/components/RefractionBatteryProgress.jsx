@@ -11,7 +11,6 @@ const NEAR_STEPS = [
   { id: "duochrome", label: "Duochrome" },
   { id: "simulator", label: "Refine" },
   { id: "astigmatism", label: "Astigmatism" },
-  { id: "snellen", label: "Distance (secondary)" },
 ];
 
 export function RefractionBatteryProgress({ currentStep, isDarkMode, variant = "far" }) {

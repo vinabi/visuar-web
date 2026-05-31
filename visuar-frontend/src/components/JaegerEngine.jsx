@@ -1,12 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { PauseCircle, CheckCircle2, XCircle } from "lucide-react";
 import { getJaegerDisplaySize, getBrowserZoomWarning } from "../utils/visionScaling";
-import { VIEWING_DISTANCE } from "../utils/viewingDistance";
+import { VIEWING_DISTANCE, TEST_DISTANCE_CM } from "../utils/viewingDistance";
 import {
   NEAR_TEXT_LEVELS,
   getJaegerRowLetters,
   snellenPassThreshold,
 } from "../utils/testStimuli";
+import {
+  computeJaegerEyeResult,
+  jaegerNToJLabel,
+  jaegerNToNearDecimal,
+  parseJaegerN,
+} from "../utils/jaegerAcuity";
 import { useLetterRowInput } from "../hooks/useLetterRowInput";
 
 export const JAEGER_LEVELS = NEAR_TEXT_LEVELS;
@@ -14,35 +20,47 @@ export const JAEGER_LEVELS = NEAR_TEXT_LEVELS;
 const FEEDBACK_MS = 1400;
 
 function JaegerRow({ level, letters, fontSize, muted, highlight, isDarkMode }) {
+  const n = parseJaegerN(level);
+  const j = jaegerNToJLabel(n);
+  const decimal = jaegerNToNearDecimal(n, TEST_DISTANCE_CM);
+
   return (
     <div
-      className={`flex items-center justify-center gap-3 md:gap-5 py-2 md:py-3 px-2 rounded-xl transition-all ${
+      className={`flex items-center gap-2 md:gap-3 py-1 md:py-1.5 px-2 rounded-lg transition-all ${
         highlight
           ? isDarkMode
             ? "bg-violet-500/15 border-2 border-violet-500/50"
             : "bg-violet-50 border-2 border-violet-400"
           : muted
-            ? "opacity-35"
+            ? "opacity-40"
             : ""
       }`}
     >
-      <span
-        className={`shrink-0 text-[10px] md:text-xs font-bold w-10 text-right ${
+      <div
+        className={`shrink-0 text-[9px] md:text-[10px] font-bold w-14 md:w-16 text-right leading-tight ${
           isDarkMode ? "text-slate-500" : "text-slate-400"
         }`}
       >
-        {level}
-      </span>
+        <div>{level}</div>
+        <div className="font-normal opacity-80">{j}</div>
+      </div>
       <div
-        className={`font-sans font-black tracking-[0.15em] flex gap-2 md:gap-3 ${
+        className={`font-sans font-black tracking-[0.12em] flex gap-1.5 md:gap-2 flex-1 justify-center ${
           isDarkMode ? "text-white" : "text-black"
         }`}
-        style={{ fontSize: `${fontSize}px`, lineHeight: 1 }}
+        style={{ fontSize: `${fontSize}px`, lineHeight: 1.05 }}
       >
         {letters.map((ch, i) => (
           <span key={i}>{ch}</span>
         ))}
       </div>
+      <span
+        className={`shrink-0 text-[9px] w-10 text-left hidden sm:block ${
+          isDarkMode ? "text-slate-600" : "text-slate-400"
+        }`}
+      >
+        {decimal}
+      </span>
     </div>
   );
 }
@@ -66,6 +84,11 @@ export function JaegerEngine({
   const lettersPerRow = rowLetters.length;
   const passThreshold = snellenPassThreshold(lettersPerRow);
 
+  const activeStandard = useMemo(
+    () => computeJaegerEyeResult(effectiveLevel, TEST_DISTANCE_CM),
+    [effectiveLevel]
+  );
+
   const [submitted, setSubmitted] = useState(false);
   const [rowScore, setRowScore] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -77,15 +100,6 @@ export function JaegerEngine({
   const zoomWarning = getBrowserZoomWarning(
     parseFloat(localStorage.getItem("visuar_calibration_dpr") || "0")
   );
-
-  const prevLevel = effectiveIndex > 0 ? jaegerLevels[effectiveIndex - 1] : null;
-  const nextLevel =
-    !screenerMode && effectiveIndex < jaegerLevels.length - 1
-      ? jaegerLevels[effectiveIndex + 1]
-      : null;
-
-  const prevLetters = prevLevel ? getJaegerRowLetters(prevLevel, quickMode) : [];
-  const nextLetters = nextLevel ? getJaegerRowLetters(nextLevel, quickMode) : [];
 
   const finalizeRow = useCallback(
     ({ letters, expectedText, userTypedText, correctCount, wrongCount, positionMatches, accuracyPercent }) => {
@@ -105,6 +119,7 @@ export function JaegerEngine({
           wrongCount,
           positionMatches,
           accuracyPercent,
+          level: effectiveLevel,
           rowTimings: [
             {
               correct: passed,
@@ -151,45 +166,47 @@ export function JaegerEngine({
       )}
 
       <div
-        className={`mb-2 px-4 py-1.5 rounded-full text-sm font-bold ${
+        className={`mb-2 px-4 py-1.5 rounded-full text-sm font-bold text-center ${
           isDarkMode ? "bg-violet-500/15 text-violet-300 border border-violet-500/30" : "bg-violet-50 text-violet-700 border border-violet-200"
         }`}
       >
         {screenerMode ? "Near screener — " : ""}
-        {effectiveLevel} — Read the highlighted line
+        Read the <span className="text-violet-400">highlighted</span> row (largest → smallest)
       </div>
 
-      <div className={`mb-4 px-4 py-2 rounded-xl text-sm font-semibold ${isDarkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-700"}`}>
-        👁️ Cover {coveredEyeLabel} eye · {VIEWING_DISTANCE.labelShort} viewing distance
+      {activeStandard && (
+        <p className={`text-xs mb-2 text-center ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+          Active row: {activeStandard.jLabel} · near {activeStandard.nearDecimal} · est. reading +{activeStandard.readingAddD.toFixed(2)} D
+        </p>
+      )}
+
+      <div className={`mb-3 px-4 py-2 rounded-xl text-sm font-semibold ${isDarkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-700"}`}>
+        👁️ Cover {coveredEyeLabel} eye · {VIEWING_DISTANCE.labelShort}
       </div>
 
-      <div className="w-full space-y-1 mb-4">
-        {prevLevel && (
-          <JaegerRow
-            level={prevLevel}
-            letters={prevLetters}
-            fontSize={getJaegerDisplaySize(prevLevel, ppi)}
-            muted
-            isDarkMode={isDarkMode}
-          />
-        )}
-        <JaegerRow
-          level={effectiveLevel}
-          letters={rowLetters}
-          fontSize={getJaegerDisplaySize(effectiveLevel, ppi)}
-          highlight
-          isDarkMode={isDarkMode}
-        />
-        {nextLevel && (
-          <JaegerRow
-            level={nextLevel}
-            letters={nextLetters}
-            fontSize={getJaegerDisplaySize(nextLevel, ppi)}
-            muted
-            isDarkMode={isDarkMode}
-          />
-        )}
+      <div className="w-full max-h-[42vh] overflow-y-auto mb-3 pr-1 rounded-xl border border-transparent">
+        <div className="w-full space-y-0.5">
+          {(screenerMode ? ["N8"] : jaegerLevels).map((level) => {
+            const letters = getJaegerRowLetters(level, quickMode);
+            const isActive = level === effectiveLevel;
+            return (
+              <JaegerRow
+                key={level}
+                level={level}
+                letters={letters}
+                fontSize={getJaegerDisplaySize(level, ppi)}
+                highlight={isActive}
+                muted={!isActive}
+                isDarkMode={isDarkMode}
+              />
+            );
+          })}
+        </div>
       </div>
+
+      <p className={`text-[10px] mb-2 w-full text-center ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+        Column: N size · J standard · letters (height scales as N÷8 × 2.9 mm @ {TEST_DISTANCE_CM} cm)
+      </p>
 
       <div className="flex gap-2 mb-3">
         {displaySlots.map((a, i) => (
@@ -220,7 +237,7 @@ export function JaegerEngine({
       )}
 
       <p className={`text-xs mb-3 text-center max-w-md ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-        Type any letters A–Z ({filledCount}/{lettersPerRow}). Wrong letters are recorded.
+        Type the highlighted row ({filledCount}/{lettersPerRow}). Each row uses a different print size.
       </p>
 
       <div className="flex gap-3">

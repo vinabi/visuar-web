@@ -41,7 +41,8 @@ export default function DashboardPage() {
   const [reportLoading, setReportLoading] = useState(false);
 
   const TEST_TYPE_LABELS = {
-    "snellen-acuity": "Eyesight Number Test",
+    "snellen-acuity": "Distance Eyesight Number Test",
+    "jaeger-acuity": "Near Eyesight Number Test",
     "contrast-sensitivity": "Contrast Sensitivity",
     "orientation-discrimination": "Orientation Discrimination",
     "rapid-recognition": "Rapid Recognition",
