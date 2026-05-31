@@ -120,7 +120,7 @@ def _welcome_html(name: str, email: str) -> str:
           <div style="background:#0f172a;border:1px solid #334155;border-top:3px solid #0891b2;border-radius:12px;padding:20px 16px;">
             <div style="font-size:24px;margin-bottom:10px;">👁️</div>
             <p style="margin:0 0 6px;color:#f1f5f9;font-size:14px;font-weight:700;">Vision Tests</p>
-            <p style="margin:0;color:#64748b;font-size:12px;line-height:1.5;">Snellen, Contrast, Refraction & more</p>
+            <p style="margin:0;color:#64748b;font-size:12px;line-height:1.5;">Eyesight Number, Contrast, Refraction & more</p>
           </div>
         </td>
         <td style="padding:0 8px 12px;width:33%;vertical-align:top;">
@@ -210,7 +210,7 @@ def _login_html(name: str, email: str, login_time: str) -> str:
 # ── Email 3: Test Completion ──────────────────────────────────────────────────
 
 _TEST_LABELS = {
-    "snellen-acuity":          "Snellen Visual Acuity",
+    "snellen-acuity":          "Eyesight Number Test",
     "contrast-sensitivity":    "Contrast Sensitivity",
     "orientation-discrimination": "Orientation Discrimination",
     "rapid-recognition":       "Rapid Recognition",

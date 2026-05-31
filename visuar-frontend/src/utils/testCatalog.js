@@ -71,8 +71,8 @@ export const SAFETY_COPY =
 const ALL_TESTS = [
   {
     id: TEST_IDS.SNELLEN,
-    title: "Snellen Acuity",
-    description: "Distance letter chart at calibrated 60–80 cm for far blur screening.",
+    title: "Eyesight Number Test",
+    description: "Checks how clearly you see letters and estimates your eyesight number.",
     duration: "4 min",
     badge: "Distance vision",
     available: true,
@@ -112,7 +112,7 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.ASTIGMATISM,
     title: "Astigmatism Fan",
-    description: "Clock-dial lines for estimated cylinder and axis.",
+    description: "Fan chart for axis, then cross-lines and slider for cylinder (CYL) in 0.25 D steps.",
     duration: "2 min",
     badge: "Cylinder and axis",
     available: true,
@@ -122,7 +122,7 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.REFRACTION_BATTERY,
     title: "Full Refraction Battery",
-    description: "Snellen, duochrome, simulator, and astigmatism fan combined.",
+    description: "Eyesight Number, duochrome, simulator, and astigmatism fan combined.",
     duration: "12 min",
     badge: "Recommended",
     available: true,
@@ -268,7 +268,7 @@ function decorateBatteryTitle(test, focus) {
       ...test,
       title: "Full Distance Refraction Battery",
       description:
-        "Snellen, refraction simulator, duochrome, and astigmatism fan for distance blur.",
+        "Eyesight Number, refraction simulator, duochrome, and astigmatism fan for distance blur.",
     };
   }
   if (focus === VISION_FOCUS.BOTH) {

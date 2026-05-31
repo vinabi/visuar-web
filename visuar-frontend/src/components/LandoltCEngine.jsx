@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowDownUp } from "lucide-react";
 import { buildMetricsPayload, calcSessionStability, calcWeightedLandoltScore } from "../utils/metricsEngine";
 import { acuityToScore } from "../utils/acuityUnits";
 import {
@@ -7,14 +7,24 @@ import {
   LANDOLT_START_TIER_INDEX,
   LANDOLT_TRIALS_PER_TIER,
   LANDOLT_PASS_MIN_CORRECT,
-  LANDOLT_TEST_DISTANCE_CM,
   calculateLandoltAcuityResults,
 } from "../utils/landoltAcuity";
 import { getLandoltSizeFromDecimal, getBrowserZoomWarning } from "../utils/visionScaling";
+import {
+  FOCUS_MODES,
+  FOCUS_NEAR_CM,
+  FOCUS_FAR_CM,
+  getFocusConfig,
+  getOppositeFocusMode,
+  evaluateLandoltPixelSafeguard,
+} from "../utils/nearFarFocus";
+import { useFocusDistanceHold } from "../hooks/useFocusDistanceHold";
+import { FocusDistanceGate } from "./FocusDistanceGate";
 import { LandoltCSvg } from "./LandoltCSvg";
 
 const MAX_TIER = LANDOLT_ACUITY_TIERS.length - 1;
 const FEEDBACK_MS = 450;
+const FROZEN_MS = 400;
 
 const CARDINAL_DIRECTIONS = [
   { key: "E", label: "Right", angle: 0, arrow: ArrowRight },
@@ -35,11 +45,20 @@ function pickRandomDirection() {
 }
 
 /**
- * Landolt C resolving-power test @ 50 cm (ISO 8596 ring geometry).
- * 5 random orientations per tier; pass ≥ 4/5 → next tier; fail → stop and score last passed tier.
+ * Landolt C @ variable focus distance (50 cm near / 100 cm far).
+ * Doubling distance doubles on-screen ring size (constant visual angle).
  */
-export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete }) {
+export function LandoltCEngine({
+  ppi = 96,
+  isDarkMode,
+  visionOk,
+  visionResult = null,
+  onTestComplete,
+  enableFocusSwitch = true,
+}) {
   const [phase, setPhase] = useState("INSTRUCTIONS");
+  const [focusMode, setFocusMode] = useState(FOCUS_MODES.NEAR);
+  const [switchPhase, setSwitchPhase] = useState(null);
   const [tierIndex, setTierIndex] = useState(LANDOLT_START_TIER_INDEX);
   const [trialInTier, setTrialInTier] = useState(0);
   const [gapDir, setGapDir] = useState(CARDINAL_DIRECTIONS[0].key);
@@ -47,7 +66,9 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
   const [picked, setPicked] = useState(null);
   const [tierCorrect, setTierCorrect] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [resolutionNote, setResolutionNote] = useState(null);
 
+  const pendingFocusRef = useRef(null);
   const roundsRef = useRef([]);
   const tierCorrectRef = useRef(0);
   const trialInTierRef = useRef(0);
@@ -59,19 +80,31 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
   const pausedRef = useRef(false);
   const pauseCountRef = useRef(0);
   const wasPausedRef = useRef(false);
+  const focusModeRef = useRef(FOCUS_MODES.NEAR);
 
   tierRef.current = tierIndex;
   gapRef.current = gapDir;
   phaseRef.current = phase;
-  pausedRef.current = isPaused;
+  pausedRef.current = isPaused || switchPhase != null;
   tierCorrectRef.current = tierCorrect;
+  focusModeRef.current = focusMode;
+
+  const focusCfg = getFocusConfig(focusMode);
+  const focusDistanceCm = focusCfg.targetCm;
 
   const tier = LANDOLT_ACUITY_TIERS[tierIndex];
   const decimal = tier.decimal;
-  const ringPx = getLandoltSizeFromDecimal(decimal, ppi, LANDOLT_TEST_DISTANCE_CM);
+  const safeguard = evaluateLandoltPixelSafeguard(decimal, ppi, focusDistanceCm);
+  const ringPx = safeguard.ringPx;
   const canvasCSSSize = Math.max(
     260,
-    getLandoltSizeFromDecimal(LANDOLT_ACUITY_TIERS[0].decimal, ppi, LANDOLT_TEST_DISTANCE_CM) + 48
+    getLandoltSizeFromDecimal(LANDOLT_ACUITY_TIERS[0].decimal, ppi, focusDistanceCm) + 48
+  );
+
+  const { holdProgress, gateOpen, distanceOk: gateDistanceOk } = useFocusDistanceHold(
+    visionResult,
+    pendingFocusRef.current || focusMode,
+    switchPhase === "gate"
   );
 
   const zoomWarning = getBrowserZoomWarning(
@@ -79,16 +112,31 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
   );
 
   useEffect(() => {
-    if (phase !== "TESTING") return;
+    if (phase !== "TESTING" || switchPhase) return;
     const nowPaused = !visionOk;
     if (nowPaused && !wasPausedRef.current) pauseCountRef.current += 1;
     wasPausedRef.current = nowPaused;
     setIsPaused(nowPaused);
-  }, [visionOk, phase]);
+  }, [visionOk, phase, switchPhase]);
 
   useEffect(() => {
-    if (!isPaused && waitingRef.current) roundStartRef.current = Date.now();
-  }, [isPaused]);
+    if (!isPaused && waitingRef.current && !switchPhase) {
+      roundStartRef.current = Date.now();
+    }
+  }, [isPaused, switchPhase]);
+
+  useEffect(() => {
+    if (switchPhase !== "gate" || !gateOpen || !pendingFocusRef.current) return;
+    const next = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    setFocusMode(next);
+    focusModeRef.current = next;
+    setTierIndex(LANDOLT_START_TIER_INDEX);
+    setTierCorrect(0);
+    tierCorrectRef.current = 0;
+    setSwitchPhase(null);
+    beginTrialRef.current(LANDOLT_START_TIER_INDEX, 0);
+  }, [switchPhase, gateOpen]);
 
   const beginTrial = useCallback((ti, trialIdx) => {
     const dir = pickRandomDirection();
@@ -102,8 +150,11 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
     roundStartRef.current = Date.now();
   }, []);
 
+  const beginTrialRef = useRef(beginTrial);
+  beginTrialRef.current = beginTrial;
+
   const finish = useCallback(
-    ({ failedTierIndex, completedAll = false }) => {
+    ({ failedTierIndex, completedAll = false, resolutionLimited = false }) => {
       const rounds = roundsRef.current;
       const metrics = buildMetricsPayload(rounds, MAX_TIER);
       const sessionStability = calcSessionStability(pauseCountRef.current);
@@ -129,28 +180,61 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
         ...metrics,
         sessionStability,
         pauseCount: pauseCountRef.current,
-        protocol: "landolt_tier_5x4of5",
-        testDistanceCm: LANDOLT_TEST_DISTANCE_CM,
+        protocol: "landolt_tier_5x4of5_focus",
+        focusMode: focusModeRef.current,
+        testDistanceCm: focusDistanceCm,
+        resolutionLimited,
+        resolutionNote: resolutionLimited ? resolutionNote : null,
+        nearFarSwitches: rounds.filter((r) => r.focusSwitch).length,
       });
     },
-    [onTestComplete]
+    [onTestComplete, focusDistanceCm, resolutionNote]
+  );
+
+  const finishResolutionLimited = useCallback(
+    (lastPassedTierIndex, message) => {
+      setResolutionNote(message);
+      finish({
+        failedTierIndex: Math.min(lastPassedTierIndex + 1, MAX_TIER + 1),
+        resolutionLimited: true,
+      });
+    },
+    [finish]
+  );
+
+  const tierPassesSafeguard = useCallback(
+    (ti) => {
+      const sg = evaluateLandoltPixelSafeguard(
+        LANDOLT_ACUITY_TIERS[ti].decimal,
+        ppi,
+        focusModeRef.current === FOCUS_MODES.FAR ? FOCUS_FAR_CM : FOCUS_NEAR_CM
+      );
+      return sg;
+    },
+    [ppi]
   );
 
   const advanceAfterTier = useCallback(
-    (passed, failedOrCurrentIndex) => {
+    (passed, currentIndex) => {
       if (passed) {
-        if (failedOrCurrentIndex >= MAX_TIER) {
+        if (currentIndex >= MAX_TIER) {
           finish({ failedTierIndex: MAX_TIER + 1, completedAll: true });
+          return;
+        }
+        const nextIndex = currentIndex + 1;
+        const sg = tierPassesSafeguard(nextIndex);
+        if (!sg.display) {
+          finishResolutionLimited(currentIndex, sg.message);
           return;
         }
         setTierCorrect(0);
         tierCorrectRef.current = 0;
-        beginTrial(failedOrCurrentIndex + 1, 0);
+        beginTrial(nextIndex, 0);
         return;
       }
-      finish({ failedTierIndex: failedOrCurrentIndex });
+      finish({ failedTierIndex: currentIndex });
     },
-    [beginTrial, finish]
+    [beginTrial, finish, finishResolutionLimited, tierPassesSafeguard]
   );
 
   const processAnswer = useCallback(
@@ -170,6 +254,9 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
         responseTime: rt,
         answer: answerKey,
         gap: gapRef.current,
+        focusMode: focusModeRef.current,
+        focusDistanceCm:
+          focusModeRef.current === FOCUS_MODES.FAR ? FOCUS_FAR_CM : FOCUS_NEAR_CM,
       });
 
       setPicked(answerKey);
@@ -194,8 +281,20 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
     [beginTrial, advanceAfterTier]
   );
 
+  const requestFocusSwitch = useCallback(() => {
+    if (!enableFocusSwitch || switchPhase) return;
+    const next = getOppositeFocusMode(focusModeRef.current);
+    pendingFocusRef.current = next;
+    waitingRef.current = false;
+    setFeedback(null);
+    setSwitchPhase("frozen");
+    setTimeout(() => {
+      setSwitchPhase("gate");
+    }, FROZEN_MS);
+  }, [enableFocusSwitch, switchPhase]);
+
   useEffect(() => {
-    if (phase !== "TESTING") return;
+    if (phase !== "TESTING" || switchPhase) return;
     const onKey = (e) => {
       const dir = KEY_TO_DIR[e.key];
       if (!dir || feedback) return;
@@ -204,122 +303,126 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, feedback, processAnswer]);
+  }, [phase, feedback, processAnswer, switchPhase]);
 
   const handleStart = useCallback(() => {
     roundsRef.current = [];
     pauseCountRef.current = 0;
     wasPausedRef.current = false;
+    setResolutionNote(null);
+    setFocusMode(FOCUS_MODES.NEAR);
+    focusModeRef.current = FOCUS_MODES.NEAR;
     setTierCorrect(0);
     tierCorrectRef.current = 0;
     setPhase("TESTING");
+    const sg = tierPassesSafeguard(LANDOLT_START_TIER_INDEX);
+    if (!sg.display) {
+      finishResolutionLimited(-1, sg.message);
+      return;
+    }
     beginTrial(LANDOLT_START_TIER_INDEX, 0);
-  }, [beginTrial]);
+  }, [beginTrial, tierPassesSafeguard, finishResolutionLimited]);
 
   const gapAngle = CARDINAL_DIRECTIONS.find((d) => d.key === gapDir)?.angle ?? 0;
+  const oppositeLabel = getFocusConfig(getOppositeFocusMode(focusMode)).label;
 
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
-        <div
-          className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${
-            isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"
-          }`}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            className={`w-9 h-9 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.5}
-            strokeLinecap="round"
-          >
-            <path d="M12 3a9 9 0 1 0 4 0.8" />
-          </svg>
-        </div>
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Landolt C Acuity Test
         </h2>
         <p className={`text-base mb-3 max-w-md ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-          Measures <strong>resolving power</strong> — how small a gap you can see — without letter guessing.
-          Test distance: <strong>{LANDOLT_TEST_DISTANCE_CM} cm</strong>.
+          Resolving power at <strong>{FOCUS_NEAR_CM} cm</strong> (near). You can switch to{" "}
+          <strong>{FOCUS_FAR_CM} cm</strong> (far) — rings scale up automatically (same visual angle).
         </p>
         <ul
           className={`text-sm text-left mb-6 space-y-2 max-w-sm ${
             isDarkMode ? "text-slate-400" : "text-slate-500"
           }`}
         >
-          <li className="flex gap-2">
-            <span className="text-cyan-400">◆</span>
-            <span>
-              Start at decimal <strong>0.29</strong> (20/70). <strong>5 trials</strong> per size; pass with{" "}
-              <strong>≥ 4/5</strong> correct.
-            </span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-cyan-400">◆</span>
-            <span>Pass → smaller ring. <strong>Fail → test stops</strong>; score = last tier you cleared.</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-cyan-400">◆</span>
-            <span>Arrow buttons or keyboard (↑ ↓ ← →).</span>
-          </li>
+          <li>5 trials per tier · pass with ≥ 4/5 · fail stops the test.</li>
+          <li>Switching focus freezes the chart, then webcam checks your new distance (2 s hold).</li>
+          <li>Tiers restart from the beginning after each switch.</li>
         </ul>
         <button
           type="button"
           onClick={handleStart}
           disabled={!visionOk}
-          className={`px-10 py-4 rounded-full text-lg font-bold transition-all shadow-lg ${
-            visionOk
-              ? "bg-cyan-500 hover:bg-cyan-400 text-white"
-              : "bg-slate-500/40 text-slate-400 cursor-not-allowed"
+          className={`px-10 py-4 rounded-full text-lg font-bold ${
+            visionOk ? "bg-cyan-500 text-white" : "bg-slate-500/40 text-slate-400"
           }`}
         >
-          {visionOk ? "Start Test" : "Waiting for camera…"}
+          {visionOk ? "Start at near (50 cm)" : "Waiting for camera…"}
         </button>
-        {!visionOk && (
-          <p className={`mt-3 text-sm ${isDarkMode ? "text-amber-400" : "text-amber-600"}`}>
-            Make sure your face is visible and at the correct distance.
-          </p>
-        )}
       </div>
     );
   }
 
   if (phase === "TESTING") {
+    const testingBlocked = switchPhase != null;
+
     return (
       <div className="relative flex flex-col items-center justify-center w-full h-full p-4 select-none">
-        {isPaused && (
+        {switchPhase === "frozen" && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/80 backdrop-blur-md rounded-3xl">
+            <p className="text-lg font-bold text-white px-6 text-center">
+              Switching to {getFocusConfig(pendingFocusRef.current || focusMode).label}…
+              <br />
+              <span className="text-sm font-normal text-slate-300">Chart frozen — do not read the ring</span>
+            </p>
+          </div>
+        )}
+
+        {switchPhase === "gate" && (
+          <FocusDistanceGate
+            focusMode={pendingFocusRef.current || focusMode}
+            visionResult={visionResult}
+            holdProgress={holdProgress}
+            distanceOk={gateDistanceOk}
+            isDarkMode={isDarkMode}
+            title="Step 3: Webcam distance check"
+          />
+        )}
+
+        {isPaused && !testingBlocked && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-3xl">
             <div className="text-center">
               <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-3" />
               <p className="text-xl font-bold text-white">Test Paused</p>
-              <p className="text-sm text-slate-300 mt-2">Return to the correct position to continue</p>
             </div>
           </div>
         )}
 
-        {zoomWarning && (
-          <div className="mb-2 px-4 py-2 rounded-xl text-xs font-semibold text-center bg-amber-500/15 text-amber-500 border border-amber-500/30">
-            ⚠️ {zoomWarning}
-          </div>
+        {enableFocusSwitch && !testingBlocked && (
+          <button
+            type="button"
+            onClick={requestFocusSwitch}
+            className={`mb-3 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${
+              isDarkMode
+                ? "bg-violet-500/20 text-violet-300 border border-violet-500/40 hover:bg-violet-500/30"
+                : "bg-violet-50 text-violet-800 border border-violet-200 hover:bg-violet-100"
+            }`}
+          >
+            <ArrowDownUp className="w-4 h-4" />
+            Switch to {oppositeLabel}
+          </button>
         )}
 
         <div
           className={`text-sm font-bold mb-1 tabular-nums ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}
         >
-          Decimal {decimal} · {tier.snellen20} · {tier.snellen6}
+          {focusCfg.label} ({focusDistanceCm} cm) · decimal {decimal}
           <span className="mx-2 opacity-40">·</span>
           Trial {trialInTier + 1}/{LANDOLT_TRIALS_PER_TIER}
-          <span className="mx-2 opacity-40">·</span>
-          {tierCorrect}/{LANDOLT_TRIALS_PER_TIER} correct (need {LANDOLT_PASS_MIN_CORRECT})
         </div>
-        <p className={`text-xs mb-3 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-          Which way is the gap facing?
-        </p>
+
+        {!safeguard.display && !testingBlocked && (
+          <p className="text-xs text-amber-500 mb-2 px-4 text-center">{safeguard.message}</p>
+        )}
 
         <div
-          className={`rounded-2xl overflow-hidden flex items-center justify-center transition-all duration-100 ${
+          className={`rounded-2xl overflow-hidden flex items-center justify-center ${
             feedback === "correct"
               ? "ring-4 ring-green-500"
               : feedback === "wrong"
@@ -331,44 +434,30 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
           style={{
             width: canvasCSSSize,
             height: canvasCSSSize,
-            position: "relative",
             background: "rgb(250,250,250)",
+            opacity: testingBlocked ? 0.3 : 1,
+            pointerEvents: testingBlocked ? "none" : "auto",
           }}
         >
-          <div className="flex items-center justify-center w-full h-full">
-            <LandoltCSvg size={ringPx} gapAngleDeg={gapAngle} grayVal={30} />
-          </div>
-          {feedback && (
-            <div
-              className={`absolute inset-0 flex items-center justify-center text-6xl font-black ${
-                feedback === "correct" ? "text-green-500" : "text-red-500"
-              }`}
-              style={{ background: "rgba(0,0,0,0.06)" }}
-            >
-              {feedback === "correct" ? "✓" : "✗"}
-            </div>
-          )}
+          <LandoltCSvg size={ringPx} gapAngleDeg={gapAngle} grayVal={30} />
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 max-w-xs w-full">
+        <div
+          className={`mt-5 grid grid-cols-2 gap-3 max-w-xs w-full ${
+            testingBlocked ? "opacity-30 pointer-events-none" : ""
+          }`}
+        >
           {CARDINAL_DIRECTIONS.map((d) => {
             const Icon = d.arrow;
-            const isHi = feedback && picked === d.key;
             return (
               <button
                 key={d.key}
                 type="button"
-                disabled={!!feedback || isPaused}
+                disabled={!!feedback || isPaused || testingBlocked}
                 onClick={() => processAnswer(d.key)}
-                className={`flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm transition-all ${
-                  isHi
-                    ? feedback === "correct"
-                      ? "bg-green-500 text-white"
-                      : "bg-red-500 text-white"
-                    : isDarkMode
-                      ? "bg-slate-800 hover:bg-slate-700 text-white"
-                      : "bg-slate-100 hover:bg-slate-200 text-slate-800"
-                } ${feedback || isPaused ? "opacity-60 cursor-not-allowed" : ""}`}
+                className={`flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm ${
+                  isDarkMode ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-800"
+                }`}
               >
                 <Icon className="w-6 h-6" />
                 {d.label}
@@ -376,9 +465,6 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
             );
           })}
         </div>
-        <p className={`text-[10px] mt-2 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-          Or use keyboard arrow keys
-        </p>
       </div>
     );
   }

@@ -63,22 +63,37 @@ export function applyDuochromeAdjustmentWeighted(diopter, choice, roundIndex) {
   return roundDiopter(diopter + (choice === "red" ? -step : step));
 }
 
-/** Axis from selected line indices (15° steps, 12 lines). */
-export function linesToAxis(selectedIndices) {
-  if (!selectedIndices?.length) return null;
-  const angles = selectedIndices.map((i) => (i * 15) % 180);
-  const avg = angles.reduce((a, b) => a + b, 0) / angles.length;
-  return Math.round(avg) % 180;
+/** Quarter-diopter steps on the cross-line normalization slider (0 … 4 → 0 … −1.00 D). */
+export const ASTIGMATISM_CYL_MAX_STEP = 4;
+export const ASTIGMATISM_CYL_STEP_DIOPTER = 0.25;
+
+/**
+ * Prescription axis from the darkest fan line angle (perpendicular rule).
+ * Axis = (line angle + 90°) mod 180°.
+ */
+export function darkestLineAngleToPrescriptionAxis(lineAngleDeg) {
+  const a = Number(lineAngleDeg);
+  if (!Number.isFinite(a)) return null;
+  return Math.round(((a + 90) % 180 + 180) % 180);
 }
 
-/** Cylinder heuristic from how many lines differ from uniform. */
-export function linesToCylinder(selectedIndices, allEqual) {
-  if (allEqual || !selectedIndices?.length) return 0;
-  const n = selectedIndices.length;
-  if (n >= 4) return -1.0;
-  if (n >= 3) return -0.75;
-  if (n >= 2) return -0.5;
-  return -0.25;
+/** CYL from cross-line slider step: step × −0.25 D. */
+export function cylinderFromNormalizationStep(step) {
+  const n = Math.max(0, Math.min(ASTIGMATISM_CYL_MAX_STEP, Math.round(Number(step) || 0)));
+  return roundDiopter(-n * ASTIGMATISM_CYL_STEP_DIOPTER);
+}
+
+/** @deprecated Use darkestLineAngleToPrescriptionAxis with a single line index angle. */
+export function linesToAxis(selectedIndices, lineCount = 12) {
+  if (!selectedIndices?.length) return null;
+  const lineAngle = Math.round((selectedIndices[0] * 180) / lineCount) % 180;
+  return darkestLineAngleToPrescriptionAxis(lineAngle);
+}
+
+/** @deprecated Use cylinderFromNormalizationStep after the cross-line slider phase. */
+export function linesToCylinder(_selectedIndices, allEqual) {
+  if (allEqual) return 0;
+  return 0;
 }
 
 /** Format prescription for display. */

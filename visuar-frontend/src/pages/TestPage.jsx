@@ -1140,7 +1140,7 @@ export default function TestPage() {
         const axis = eyeData.axis ?? null;
         appendScreeningResult(
           normalizeTestResultRecord({
-            testName: "Snellen Acuity",
+            testName: "Eyesight Number Test",
             testId: "snellen-acuity",
             eye,
             visionFocus,
@@ -3088,6 +3088,7 @@ export default function TestPage() {
                   ppi={ppi}
                   isDarkMode={isDarkMode}
                   visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
+                  visionResult={visionResult}
                   onTestComplete={handleLandoltComplete}
                 />
               )}
@@ -3137,7 +3138,7 @@ export default function TestPage() {
                           : "bg-violet-50 text-violet-800 border border-violet-200"
                       }`}
                     >
-                      Astigmatism check — tap the lines that look darkest or sharpest
+                      Astigmatism check — tap the single line that looks darkest or sharpest
                     </div>
                   ) : null}
                   <AstigmatismFanEngine
