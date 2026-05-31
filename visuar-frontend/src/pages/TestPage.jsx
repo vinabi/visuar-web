@@ -75,6 +75,7 @@ import {
   buildContrastPlainMeaning,
   formatFaintestContrastRead,
 } from "../utils/contrastResults";
+import { persistTestResult } from "../utils/lastTestResult";
 
 const IMPLEMENTED_TESTS = [
   "snellen-acuity",
@@ -655,6 +656,8 @@ export default function TestPage() {
       };
       setSessionEstimate(estimate);
       pendingNavRef.current = { path, state: enriched };
+      const slug = path.replace(/^\/results\//, "");
+      if (slug) persistTestResult(slug, enriched);
       setIsSaving(false);
       finishingRef.current = false;
       stopCamera();
@@ -2462,7 +2465,11 @@ export default function TestPage() {
               isDarkMode={isDarkMode}
               onViewFullResult={() => {
                 const nav = pendingNavRef.current;
-                if (nav) navigate(nav.path, { state: nav.state });
+                if (nav) {
+                  const slug = nav.path.replace(/^\/results\//, "");
+                  if (slug) persistTestResult(slug, nav.state);
+                  navigate(nav.path, { state: nav.state });
+                }
               }}
             />
           </div>

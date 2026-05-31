@@ -16,9 +16,12 @@ import { formatPrescription } from "../utils/refractionMath";
 import { DIOPTER_ESTIMATE_DISCLAIMER } from "../utils/diopterEstimate";
 import {
   acuityToScore,
+  acuityStatus,
   formatAcuityLabel,
   parseAcuityDecimal,
+  snellenEquivalent,
 } from "../utils/acuityUnits";
+import { loadPersistedTestResult } from "../utils/lastTestResult";
 import { VISION_FOCUS_LABELS } from "../utils/visionFocus";
 import { API_URL } from "../lib/config";
 import { ScreeningResultCards, BilingualAIExplanation } from "../components/ScreeningResultCards";
@@ -255,24 +258,34 @@ export default function ResultsPage() {
   const location = useLocation();
   const { session } = useAuth();
   const resultState = location.state;
+  const persistedState = !resultState && testId ? loadPersistedTestResult(testId) : null;
 
-  // ── Fetch from DB when navigating from dashboard (numeric ID, no state) ──
+  // ── Fetch from DB when navigating from dashboard (numeric ID) or slug without state ──
   const isNumericId = testId && /^\d+$/.test(testId);
   const [fetchedRecord, setFetchedRecord] = useState(null);
   const [fetchLoading, setFetchLoading] = useState(false);
 
   useEffect(() => {
-    if (!isNumericId || resultState) return;
-    if (!session?.access_token) return;
+    if (resultState || persistedState) return;
+    if (!session?.access_token || !testId) return;
     setFetchLoading(true);
-    fetch(`${API_URL}/api/test-results/${testId}`, {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
+    const headers = { Authorization: `Bearer ${session.access_token}` };
+    const load = isNumericId
+      ? fetch(`${API_URL}/api/test-results/${testId}`, { headers }).then((res) =>
+          res.ok ? res.json() : null
+        )
+      : fetch(`${API_URL}/api/test-results`, { headers })
+          .then((res) => (res.ok ? res.json() : []))
+          .then((list) => {
+            if (!Array.isArray(list)) return null;
+            return list.find((r) => r.test_type === testId) ?? null;
+          });
+
+    load
       .then((data) => { if (data) setFetchedRecord(data); })
       .catch((err) => console.error("[ResultsPage] fetch error:", err))
       .finally(() => setFetchLoading(false));
-  }, [isNumericId, testId, session, resultState]);
+  }, [isNumericId, testId, session, resultState, persistedState]);
 
   // ── Determine effective test type ────────────────────────
   const effectiveTestType = isNumericId && fetchedRecord
@@ -376,8 +389,17 @@ export default function ResultsPage() {
   const refractionData = resultState?.leftEye ? resultState : dbRefractionState;
 
   const dbSnellenState = fromDB && !isContrastTest && !isOrientationTest && !isLandoltTest && !isColorVisionTest && !isRefractionTest && !isCompleteAssessment && !isJaegerTest && !isNearFarTest ? {
-    leftEye: { acuity: fetchedRecord.left_eye_acuity, diopter: fetchedRecord.left_eye_diopter },
-    rightEye: { acuity: fetchedRecord.right_eye_acuity, diopter: fetchedRecord.right_eye_diopter },
+    leftEye: {
+      acuity: fetchedRecord.left_eye_acuity,
+      diopter: fetchedRecord.left_eye_diopter,
+      sph: fetchedRecord.left_eye_diopter,
+    },
+    rightEye: {
+      acuity: fetchedRecord.right_eye_acuity,
+      diopter: fetchedRecord.right_eye_diopter,
+      sph: fetchedRecord.right_eye_diopter,
+    },
+    overallScore: fetchedRecord.overall_score,
     timestamp: fetchedRecord.created_at,
     aiAnalysis: fetchedAI,
   } : null;
@@ -395,10 +417,10 @@ export default function ResultsPage() {
   const aiLoading = fetchLoading;
 
   // ── Effective result state for Snellen ───────────────────
-  const effectiveResultState = resultState || dbSnellenState;
+  const effectiveResultState = resultState || persistedState || dbSnellenState;
 
   const dateStr = new Date(
-    resultState?.timestamp || fetchedRecord?.created_at || Date.now()
+    resultState?.timestamp || persistedState?.timestamp || fetchedRecord?.created_at || Date.now()
   ).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   // ── Loading state while fetching history record ──────────
@@ -1378,7 +1400,9 @@ export default function ResultsPage() {
 
   // ── Snellen Visual Acuity Results ────────────────────────
   const snellenData = effectiveResultState;
-  const hasReal = snellenData?.leftEye && snellenData?.rightEye;
+  const hasReal = Boolean(
+    snellenData?.leftEye?.acuity && snellenData?.rightEye?.acuity
+  );
 
   const leftAcuity = hasReal ? snellenData.leftEye.acuity : null;
   const rightAcuity = hasReal ? snellenData.rightEye.acuity : null;
@@ -1386,7 +1410,9 @@ export default function ResultsPage() {
   const rightDiopter = hasReal ? snellenData.rightEye.diopter : null;
   const leftScore = acuityToScore(leftAcuity);
   const rightScore = acuityToScore(rightAcuity);
-  const snellenOverall = hasReal ? Math.round((leftScore + rightScore) / 2) : (snellenData?.overallScore ?? 87);
+  const snellenOverall = hasReal
+    ? Math.round((leftScore + rightScore) / 2)
+    : (snellenData?.overallScore ?? null);
 
   // Analytics from new fields (may be absent on older results)
   const sAccuracy = snellenData?.accuracy ?? 0;
@@ -1467,6 +1493,29 @@ export default function ResultsPage() {
     ? buildSnellenFindings(leftAcuity, rightAcuity, leftDiopter, rightDiopter)
     : [{ type: "info", title: "No Test Data", description: "Complete a Snellen test to see your results here." }];
   const snellenRecs = hasReal ? buildSnellenRecs(leftAcuity, rightAcuity, leftDiopter, rightDiopter) : [];
+
+  if (!hasReal) {
+    return (
+      <ResultsShell title="Snellen Visual Acuity Results" date={dateStr} isDarkMode={isDarkMode}>
+        <div className={`rounded-2xl p-10 mb-6 text-center ${isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200"}`}>
+          <Eye className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
+          <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+            No results yet
+          </h2>
+          <p className={`text-sm max-w-md mx-auto mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+            Finish a Snellen test and tap <strong>View full result</strong> on the summary screen, or open a saved
+            result from your dashboard history.
+          </p>
+          <Link to="/test/snellen-acuity">
+            <Button className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8">
+              Start Snellen test
+            </Button>
+          </Link>
+        </div>
+        <FindingsSection findings={snellenFindings} recommendations={snellenRecs} />
+      </ResultsShell>
+    );
+  }
 
   return (
     <ResultsShell title="Snellen Visual Acuity Results" date={dateStr} isDarkMode={isDarkMode}>
