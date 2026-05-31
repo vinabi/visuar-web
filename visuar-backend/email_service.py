@@ -2,6 +2,7 @@
 VISUAR Email Service
 Sends beautiful HTML emails via Gmail SMTP using aiosmtplib.
 """
+from __future__ import annotations
 
 import os
 import asyncio

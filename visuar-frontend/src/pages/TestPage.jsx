@@ -3052,13 +3052,6 @@ export default function TestPage() {
 
 // ─── Helper Components ──────────────────────────────────
 
-<<<<<<< Updated upstream
-function acuityToScore(acuityStr) {
-  if (!acuityStr) return 20;
-  const map = { "6/6": 100, "6/9": 90, "6/12": 80, "6/18": 65, "6/24": 50, "6/36": 35, "6/60": 20 };
-  return map[acuityStr] ?? 50;
-}
-
 function drawFaceGuides(ctx, W, H, faceOk, faceDetected) {
   const cx   = W / 2;
   const cy   = H / 2 - H * 0.02;
@@ -3277,9 +3270,6 @@ function drawFaceGuides(ctx, W, H, faceOk, faceDetected) {
 }
 
 function MirrorPreview({ videoRef, className = "", faceOk = false, faceDetected = false }) {
-=======
-function MirrorPreview({ videoRef, className = "" }) {
->>>>>>> Stashed changes
   const mirrorCanvasRef = useRef(null);
   const rafRef = useRef(null);
   const faceOkRef       = useRef(faceOk);
