@@ -11,6 +11,7 @@ opencv-python>=4.8.0
 mediapipe>=0.10.14,<0.10.21
 numpy>=1.24.0
 google-genai>=1.0.0
+aiosmtplib>=4.0.0
 # RAG / knowledge ingestion (used by scripts/ — also available in the server env)
 langchain-google-genai>=2.0.0
 langchain-community>=0.3.0

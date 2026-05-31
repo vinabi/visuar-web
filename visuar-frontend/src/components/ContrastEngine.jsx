@@ -70,11 +70,7 @@ export function ContrastEngine({
   const [contrastLevelIndex, setContrastLevelIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [roundNum, setRoundNum] = useState(0);
-<<<<<<< Updated upstream
-  const [feedback, setFeedback] = useState(null); // "correct" | "wrong" | null
-=======
   const [submitted, setSubmitted] = useState(false);
->>>>>>> Stashed changes
 
   const canvasRef = useRef(null);
   const roundsRef = useRef([]);
@@ -94,19 +90,10 @@ export function ContrastEngine({
   phaseRef.current = phase;
   isPausedRef.current = isPaused;
 
-<<<<<<< Updated upstream
-  const baseESizePx = getContrastSize(ppi) || 80;
-  // Shrink the E from full calibrated size down to 38 % by the final round
-  const eSizePx = Math.round(
-    baseESizePx * (0.15 + 0.85 * (1 - roundNum / TOTAL_ROUNDS))
-  );
-  const canvasCSSSize = 220;
-=======
   const level = contrastLevels[contrastLevelIndex] || contrastLevels[0];
   const letterPx = level.fontPx;
   const canvasCSSSize = Math.max(letterPx * rowLetters.length + 48, 120);
   const passThreshold = snellenPassThreshold(rowLetters.length);
->>>>>>> Stashed changes
 
   const zoomWarning = getBrowserZoomWarning(
     parseFloat(localStorage.getItem("visuar_calibration_dpr") || "0")
@@ -140,11 +127,7 @@ export function ContrastEngine({
         canvasCSSSize
       );
     }
-<<<<<<< Updated upstream
-  }, [direction, contrastLevelIndex, isDarkMode, phase, eSizePx, canvasCSSSize, roundNum]);
-=======
   }, [rowLetters, contrastLevelIndex, isDarkMode, phase, letterPx, canvasCSSSize, level]);
->>>>>>> Stashed changes
 
   useEffect(() => {
     if (phase !== "TESTING") return;
@@ -203,27 +186,14 @@ export function ContrastEngine({
       setFeedback(isCorrect ? "correct" : "wrong");
 
       setTimeout(() => {
-<<<<<<< Updated upstream
-        setFeedback(null);
-        if (completedRounds >= TOTAL_ROUNDS) {
-=======
         setSubmitted(false);
         if (completedRounds >= totalRounds) {
->>>>>>> Stashed changes
           const rounds = roundsRef.current;
           const metrics = buildMetricsPayload(rounds, contrastLevels.length - 1);
 
           const correctLevels = rounds.filter((r) => r.correct).map((r) => r.levelIndex);
           const maxCorrectLevel = correctLevels.length > 0 ? Math.max(...correctLevels) : 0;
-<<<<<<< Updated upstream
-          const lowestContrastValue =
-            CONTRAST_PERCENT_LEVELS[maxCorrectLevel]?.percent ?? 90;
-=======
           const contrastLevelPassed = contrastLevels[maxCorrectLevel]?.percent ?? 60;
-          const contrastScore = Math.round(
-            (maxCorrectLevel / Math.max(1, contrastLevels.length - 1)) * 100
-          );
->>>>>>> Stashed changes
 
           const sessionStability = calcSessionStability(pauseCountRef.current);
 
@@ -265,21 +235,12 @@ export function ContrastEngine({
     [submitted, processResponse, passThreshold]
   );
 
-<<<<<<< Updated upstream
-  const [lastClickedDir, setLastClickedDir] = useState(null);
-
-  const handleDirClick = (dir) => {
-    setLastClickedDir(dir);
-    processResponse(dir);
-  };
-=======
   const { displaySlots, filledCount } = useLetterRowInput({
     expectedLetters: rowLetters,
     visionOk: visionOk && phase === "TESTING" && !isPaused && acceptingInput && !submitted,
     submitted,
     onSubmit: finalizeRow,
   });
->>>>>>> Stashed changes
 
   const handleStart = useCallback(() => {
     roundsRef.current = [];
@@ -348,17 +309,8 @@ export function ContrastEngine({
         </div>
 
         <div
-<<<<<<< Updated upstream
-          className={`rounded-2xl overflow-hidden transition-all duration-100 ${
-            feedback === "correct"
-              ? "ring-4 ring-green-500"
-              : feedback === "wrong"
-              ? "ring-4 ring-red-500"
-              : isDarkMode ? "ring-2 ring-slate-700" : "ring-2 ring-slate-200"
-=======
           className={`rounded-2xl overflow-hidden mb-4 ${
             isDarkMode ? "ring-2 ring-slate-700" : "ring-2 ring-slate-200"
->>>>>>> Stashed changes
           }`}
           style={{ width: canvasCSSSize, height: canvasCSSSize }}
         >
@@ -372,39 +324,6 @@ export function ContrastEngine({
           )}
         </div>
 
-<<<<<<< Updated upstream
-        <p className={`mt-5 text-base font-medium ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-          Which direction are the E&apos;s prongs pointing?
-        </p>
-
-        <div className="grid grid-cols-3 gap-2 mt-4 max-w-xs w-full">
-          {[
-            { dir: "UP", label: "↑ Up", col: "col-start-2" },
-            { dir: "LEFT", label: "← Left", col: "col-start-1" },
-            { dir: "RIGHT", label: "Right →", col: "col-start-3" },
-            { dir: "DOWN", label: "↓ Down", col: "col-start-2" },
-          ].map(({ dir, label, col }) => {
-            const isThis = feedback && lastClickedDir === dir;
-            const btnColor = isThis
-              ? feedback === "correct"
-                ? "border-green-500 bg-green-500/20 text-green-400"
-                : "border-red-500 bg-red-500/20 text-red-400"
-              : isDarkMode
-              ? "border-slate-600 bg-slate-800 text-white hover:bg-cyan-500/20"
-              : "border-slate-200 bg-white hover:bg-cyan-50";
-            return (
-              <button
-                key={dir}
-                type="button"
-                disabled={isPaused || !visionOk}
-                onClick={() => handleDirClick(dir)}
-                className={`${col} py-3 rounded-xl font-bold border-2 transition-colors ${btnColor}`}
-              >
-                {label}
-              </button>
-            );
-          })}
-=======
         <div className="flex gap-2 mb-3">
           {displaySlots.map((a, i) => (
             <div
@@ -416,7 +335,6 @@ export function ContrastEngine({
               {a || "·"}
             </div>
           ))}
->>>>>>> Stashed changes
         </div>
 
         <p className={`text-sm mb-2 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>

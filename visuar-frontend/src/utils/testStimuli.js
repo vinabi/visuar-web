@@ -123,18 +123,6 @@ export function snellenPassThreshold(letterCount) {
   return 3;
 }
 
-<<<<<<< Updated upstream
-/** Contrast sensitivity — percent contrast (letter vs background), then optional blur. */
-export const CONTRAST_PERCENT_LEVELS = [
-  { percent: 90, blurPx: 0 },
-  { percent: 80, blurPx: 0 },
-  { percent: 70, blurPx: 0 },
-  { percent: 35, blurPx: 0 },
-  { percent: 25, blurPx: 0 },
-  { percent: 15, blurPx: 0.5 },
-  { percent: 10, blurPx: 1 },
-  { percent: 5,  blurPx: 1.5 },
-=======
 // ─── Jaeger near chart ─────────────────────────────────────────────────────────
 
 function uniqueDescendingInts(from, to, count) {
@@ -237,7 +225,6 @@ export const CONTRAST_LEVELS = [
   { percent: 6,  fontPx: 36, letterCount: 5 },
   { percent: 4,  fontPx: 34, letterCount: 5 },
   { percent: 3,  fontPx: 32, letterCount: 5 },
->>>>>>> Stashed changes
 ];
 
 export const CONTRAST_LEVELS_QUICK = [
@@ -437,32 +424,6 @@ function pickConfusableOptotypes(count, difficulty = 0.5) {
   return result;
 }
 
-<<<<<<< Updated upstream
-/**
- * Duochrome — 10 rounds per eye, progressive difficulty.
- *
- * Rounds 0-2:  Warm-up    — large letters, full contrast
- * Rounds 3-6:  Threshold  — 6/9→6/6, dropping contrast each step
- * Round  7:    Catch      — green MUST be clearer (blur applied to red side in UI);
- *              tests whether the patient is genuinely responding
- * Rounds 8-9:  Fine refine — 6/6, very low contrast; separates good responders
- *
- * type: "normal" | "catch"
- * expectedAnswer: only meaningful on catch rounds
- */
-export const DUOCHROME_ROUNDS = [
-  { acuityLevel: "6/24", contrast: 1.00, letterCount: 3, type: "normal" },
-  { acuityLevel: "6/18", contrast: 1.00, letterCount: 4, type: "normal" },
-  { acuityLevel: "6/12", contrast: 0.90, letterCount: 4, type: "normal" },
-  { acuityLevel: "6/9",  contrast: 0.85, letterCount: 5, type: "normal" },
-  { acuityLevel: "6/9",  contrast: 0.75, letterCount: 5, type: "normal" },
-  { acuityLevel: "6/6",  contrast: 0.80, letterCount: 5, type: "normal" },
-  { acuityLevel: "6/6",  contrast: 0.65, letterCount: 5, type: "normal" },
-  { acuityLevel: "6/12", contrast: 1.00, letterCount: 4, type: "catch", expectedAnswer: "green" },
-  { acuityLevel: "6/6",  contrast: 0.55, letterCount: 5, type: "normal" },
-  { acuityLevel: "6/6",  contrast: 0.45, letterCount: 6, type: "normal" },
-];
-=======
 export function pickOptotypes(count, exclude = []) {
   const pool = OPTOTYPES.filter((c) => !exclude.includes(c));
   const result = [];
@@ -477,7 +438,6 @@ export function pickOptotypes(count, exclude = []) {
   }
   return result;
 }
->>>>>>> Stashed changes
 
 export function pickRandomLetters(count, exclude = []) {
   const pool = ALPHABET.filter((c) => !exclude.includes(c));
