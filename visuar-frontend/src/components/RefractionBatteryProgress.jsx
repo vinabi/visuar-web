@@ -1,0 +1,36 @@
+const STEPS = [
+  { id: "snellen", label: "Acuity" },
+  { id: "duochrome", label: "Duochrome" },
+  { id: "simulator", label: "Refine" },
+  { id: "astigmatism", label: "Astigmatism" },
+];
+
+export function RefractionBatteryProgress({ currentStep, isDarkMode }) {
+  const idx = STEPS.findIndex((s) => s.id === currentStep);
+  return (
+    <div className="flex flex-wrap justify-center gap-2 mb-4 px-4">
+      {STEPS.map((step, i) => {
+        const done = i < idx;
+        const active = i === idx;
+        return (
+          <div
+            key={step.id}
+            className={`px-3 py-1 rounded-full text-xs font-bold ${
+              active
+                ? "bg-cyan-500 text-white"
+                : done
+                  ? isDarkMode
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-green-100 text-green-700"
+                  : isDarkMode
+                    ? "bg-slate-800 text-slate-500"
+                    : "bg-slate-100 text-slate-400"
+            }`}
+          >
+            {step.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

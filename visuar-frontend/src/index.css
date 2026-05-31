@@ -1,0 +1,167 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer base {
+  :root {
+    --background: 0 0% 99%;
+    --foreground: 264 14% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 264 14% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 264 14% 15%;
+    --primary: 264 47% 45%;
+    --primary-foreground: 264 50% 99%;
+    --secondary: 264 20% 95%;
+    --secondary-foreground: 264 14% 25%;
+    --muted: 264 20% 96%;
+    --muted-foreground: 264 8% 55%;
+    --accent: 280 67% 50%;
+    --accent-foreground: 280 50% 99%;
+    --destructive: 30 100% 60%;
+    --destructive-foreground: 30 50% 99%;
+    --border: 264 20% 92%;
+    --input: 264 20% 92%;
+    --ring: 264 47% 45%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 264 33% 10%;
+    --foreground: 264 50% 98%;
+    --card: 264 33% 13%;
+    --card-foreground: 264 50% 98%;
+    --popover: 264 33% 13%;
+    --popover-foreground: 264 50% 98%;
+    --primary: 264 73% 60%;
+    --primary-foreground: 264 33% 10%;
+    --secondary: 264 38% 20%;
+    --secondary-foreground: 264 50% 98%;
+    --muted: 264 33% 18%;
+    --muted-foreground: 264 8% 65%;
+    --accent: 280 80% 55%;
+    --accent-foreground: 280 50% 98%;
+    --destructive: 30 93% 55%;
+    --destructive-foreground: 30 50% 98%;
+    --border: 264 33% 22%;
+    --input: 264 33% 22%;
+    --ring: 264 73% 60%;
+  }
+}
+
+@layer base {
+  body {
+    background-color: white;
+    color: rgb(15 23 42);
+  }
+}
+
+/* Glassmorphic animated bubbles */
+@layer components {
+  .bubble {
+    position: absolute;
+    border-radius: 50%;
+    background: linear-gradient(
+      135deg,
+      rgba(6, 182, 212, 0.3),
+      rgba(103, 232, 249, 0.2)
+    );
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px 0 rgba(6, 182, 212, 0.15);
+  }
+
+  /* Dark mode bubbles with purple, blue, and cyan gradient */
+  .bubble-dark {
+    position: absolute;
+    border-radius: 50%;
+    background: linear-gradient(
+      135deg,
+      rgba(139, 92, 246, 0.15),
+      rgba(59, 130, 246, 0.12),
+      rgba(34, 211, 238, 0.08)
+    );
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(139, 92, 246, 0.2),
+      0 0 60px 0 rgba(59, 130, 246, 0.1);
+  }
+
+  .bubble-1 {
+    width: 300px;
+    height: 300px;
+    top: -100px;
+    left: -100px;
+    animation: float 20s ease-in-out infinite;
+  }
+
+  .bubble-2 {
+    width: 250px;
+    height: 250px;
+    top: 50%;
+    right: -80px;
+    animation: float 18s ease-in-out infinite 2s;
+  }
+
+  .bubble-3 {
+    width: 180px;
+    height: 180px;
+    bottom: 10%;
+    left: 15%;
+    animation: float 15s ease-in-out infinite 4s;
+  }
+
+  .bubble-4 {
+    width: 220px;
+    height: 220px;
+    top: 20%;
+    right: 20%;
+    animation: float 22s ease-in-out infinite 1s;
+  }
+
+  .bubble-5 {
+    width: 280px;
+    height: 280px;
+    bottom: -120px;
+    right: 10%;
+    animation: float 19s ease-in-out infinite 3s;
+  }
+}
+
+/* Updated blinking animation with more visible effect */
+@keyframes blink {
+  0%,
+  90%,
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+  95% {
+    transform: scaleY(0.1);
+    opacity: 0.5;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(30px, -30px) scale(1.05);
+  }
+  50% {
+    transform: translate(-20px, 20px) scale(0.95);
+  }
+  75% {
+    transform: translate(20px, 30px) scale(1.02);
+  }
+}
+
+@layer utilities {
+  .animate-eye-blink {
+    animation: blink 3s ease-in-out infinite;
+  }
+}
