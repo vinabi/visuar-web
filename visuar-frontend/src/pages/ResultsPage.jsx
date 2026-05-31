@@ -457,7 +457,7 @@ export default function ResultsPage() {
   }
 
   const testTitles = {
-    "snellen-acuity": "Snellen Visual Acuity",
+    "snellen-acuity": "Eyesight Number Test",
     "jaeger-acuity": "Jaeger Near Acuity",
     "near-far-switching": "Near–Far Switching",
     complete: "Complete Vision Assessment",
@@ -1262,7 +1262,7 @@ export default function ResultsPage() {
       {
         type: "info",
         title: "Screening estimate",
-        description: "Approximate diopter values combine Snellen, duochrome, and refraction simulator when available. Not an exact prescription.",
+        description: "Approximate diopter values combine Eyesight Number, duochrome, and refraction simulator when available. Not an exact prescription.",
       },
     ];
     const recs = [
@@ -1311,7 +1311,7 @@ export default function ResultsPage() {
       findings.push({
         type: "success",
         title: "Distance Acuity Recorded",
-        description: `Left ${dist.left || "—"}, Right ${dist.right || "—"} (Snellen chart at calibrated distance).`,
+        description: `Left ${dist.left || "—"}, Right ${dist.right || "—"} (Eyesight Number test at calibrated distance).`,
       });
     }
     if (near.left || near.right) {
@@ -1506,24 +1506,24 @@ export default function ResultsPage() {
 
   const snellenFindings = hasReal
     ? buildSnellenFindings(leftAcuity, rightAcuity, leftDiopter, rightDiopter)
-    : [{ type: "info", title: "No Test Data", description: "Complete a Snellen test to see your results here." }];
+    : [{ type: "info", title: "No Test Data", description: "Complete an Eyesight Number test to see your results here." }];
   const snellenRecs = hasReal ? buildSnellenRecs(leftAcuity, rightAcuity, leftDiopter, rightDiopter) : [];
 
   if (!hasReal) {
     return (
-      <ResultsShell title="Snellen Visual Acuity Results" date={dateStr} isDarkMode={isDarkMode}>
+      <ResultsShell title="Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
         <div className={`rounded-2xl p-10 mb-6 text-center ${isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200"}`}>
           <Eye className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`} />
           <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
             No results yet
           </h2>
           <p className={`text-sm max-w-md mx-auto mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Finish a Snellen test and tap <strong>View full result</strong> on the summary screen, or open a saved
+            Finish an Eyesight Number test and tap <strong>View full result</strong> on the summary screen, or open a saved
             result from your dashboard history.
           </p>
           <Link to="/test/snellen-acuity">
             <Button className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8">
-              Start Snellen test
+              Start Eyesight Number test
             </Button>
           </Link>
         </div>
@@ -1533,7 +1533,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <ResultsShell title="Snellen Visual Acuity Results" date={dateStr} isDarkMode={isDarkMode}>
+    <ResultsShell title="Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
       {/* Hero score */}
       <div className={`rounded-2xl p-6 mb-6 ${isDarkMode ? "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20" : "bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100"}`}>
         <div className="flex flex-col md:flex-row items-center gap-8">

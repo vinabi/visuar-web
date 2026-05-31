@@ -99,7 +99,7 @@ export function getStepLabel(step) {
   const map = {
     [STEP.SCREENER_SNELLEN]: "Distance screener",
     [STEP.SCREENER_JAEGER]: "Near screener",
-    [STEP.SNELLEN]: "Snellen chart",
+    [STEP.SNELLEN]: "Eyesight number chart",
     [STEP.JAEGER]: "Jaeger reading chart",
     [STEP.CONTRAST]: "Contrast sensitivity",
     [STEP.ORIENTATION]: "Orientation discrimination",

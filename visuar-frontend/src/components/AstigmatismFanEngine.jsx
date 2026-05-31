@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { linesToAxis, linesToCylinder } from "../utils/refractionMath";
 import {
-  ASTIGMATISM_FAN_LINE_COUNT,
-  computePrimaryAxis,
-} from "../utils/testStimuli";
+  ASTIGMATISM_CYL_MAX_STEP,
+  cylinderFromNormalizationStep,
+  darkestLineAngleToPrescriptionAxis,
+} from "../utils/refractionMath";
+import { ASTIGMATISM_FAN_LINE_COUNT } from "../utils/testStimuli";
+import { VIEWING_DISTANCE } from "../utils/viewingDistance";
 
 const CANVAS_SIZE = 360;
+/** Fixed blur on the perpendicular line (Line B) before normalization. */
+const PERP_LINE_BLUR_PX = 3;
+/** Blur added to the sharp line (Line A) per slider step until it matches Line B. */
+const SHARP_LINE_BLUR_PER_STEP = PERP_LINE_BLUR_PX / ASTIGMATISM_CYL_MAX_STEP;
 
 function lineAngleDeg(index) {
   return Math.round((index * 180) / ASTIGMATISM_FAN_LINE_COUNT);
@@ -33,7 +39,6 @@ function nearestLineIndex(x, y, size, hitRadius) {
   let bestDist = hitRadius;
   for (let i = 0; i < ASTIGMATISM_FAN_LINE_COUNT; i++) {
     const angle = (i * Math.PI) / ASTIGMATISM_FAN_LINE_COUNT;
-    // Full line from one edge through center to the opposite edge
     const x1 = cx - Math.cos(angle) * r;
     const y1 = cy - Math.sin(angle) * r;
     const x2 = cx + Math.cos(angle) * r;
@@ -47,7 +52,21 @@ function nearestLineIndex(x, y, size, hitRadius) {
   return best;
 }
 
-function drawFan(canvas, selectedOrder, hoverIndex, isDarkMode, size) {
+function drawLine(ctx, cx, cy, angleDeg, r, blurPx, strokeStyle, lineWidth) {
+  const rad = (angleDeg * Math.PI) / 180;
+  ctx.save();
+  if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+  ctx.strokeStyle = strokeStyle;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx - Math.cos(rad) * r, cy - Math.sin(rad) * r);
+  ctx.lineTo(cx + Math.cos(rad) * r, cy + Math.sin(rad) * r);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFan(canvas, selectedIndex, hoverIndex, isDarkMode, size) {
   if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const expected = Math.round(size * dpr);
@@ -59,17 +78,17 @@ function drawFan(canvas, selectedOrder, hoverIndex, isDarkMode, size) {
   }
   const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.filter = "none";
   ctx.fillStyle = isDarkMode ? "#0d1117" : "#ffffff";
   ctx.fillRect(0, 0, size, size);
 
   const cx = size / 2;
   const cy = size / 2;
   const r = size * 0.42;
-  const selected = new Set(selectedOrder);
 
   for (let i = 0; i < ASTIGMATISM_FAN_LINE_COUNT; i++) {
     const angle = (i * Math.PI) / ASTIGMATISM_FAN_LINE_COUNT;
-    const isSelected = selected.has(i);
+    const isSelected = selectedIndex === i;
     const isHovered = hoverIndex === i && !isSelected;
 
     if (isSelected) {
@@ -85,15 +104,41 @@ function drawFan(canvas, selectedOrder, hoverIndex, isDarkMode, size) {
 
     ctx.lineCap = "round";
     ctx.beginPath();
-    // Full line from edge to edge through center (proper clock-dial appearance)
     ctx.moveTo(cx - Math.cos(angle) * r, cy - Math.sin(angle) * r);
     ctx.lineTo(cx + Math.cos(angle) * r, cy + Math.sin(angle) * r);
     ctx.stroke();
   }
 }
 
+function drawCross(canvas, lineAngle, sliderStep, isDarkMode, size) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const expected = Math.round(size * dpr);
+  if (canvas.width !== expected) {
+    canvas.width = expected;
+    canvas.height = expected;
+    canvas.style.width = `${size}px`;
+    canvas.style.height = `${size}px`;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.filter = "none";
+  ctx.fillStyle = isDarkMode ? "#0d1117" : "#ffffff";
+  ctx.fillRect(0, 0, size, size);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.42;
+  const perpAngle = (lineAngle + 90) % 180;
+  const sharpBlur = sliderStep * SHARP_LINE_BLUR_PER_STEP;
+  const stroke = isDarkMode ? "#e2e8f0" : "#0f172a";
+
+  drawLine(ctx, cx, cy, perpAngle, r, PERP_LINE_BLUR_PX, stroke, 3);
+  drawLine(ctx, cx, cy, lineAngle, r, sharpBlur, stroke, 4);
+}
+
 /**
- * Clock-dial / fan chart for astigmatism axis and cylinder estimate.
+ * Astigmatism fan → cross-line normalization → CYL & axis estimate.
  */
 export function AstigmatismFanEngine({
   isDarkMode,
@@ -101,12 +146,18 @@ export function AstigmatismFanEngine({
   onComplete,
   showInstructions = true,
 }) {
-  const [phase, setPhase] = useState(showInstructions ? "INSTRUCTIONS" : "TESTING");
-  const [selectedOrder, setSelectedOrder] = useState([]);
+  const [phase, setPhase] = useState(showInstructions ? "INSTRUCTIONS" : "FAN");
+  const [selectedIndex, setSelectedIndex] = useState(null);
   const [hoverIndex, setHoverIndex] = useState(null);
+  const [sliderStep, setSliderStep] = useState(0);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const isTouchRef = useRef(false);
+
+  const darkestLineAngle =
+    selectedIndex != null ? lineAngleDeg(selectedIndex) : null;
+  const prescriptionAxis =
+    darkestLineAngle != null ? darkestLineAngleToPrescriptionAxis(darkestLineAngle) : null;
 
   const coordsFromEvent = useCallback((clientX, clientY) => {
     const el = containerRef.current;
@@ -123,16 +174,20 @@ export function AstigmatismFanEngine({
   const hitRadius = useCallback(() => (isTouchRef.current ? 24 : 16), []);
 
   useEffect(() => {
-    if (phase === "TESTING") {
-      drawFan(canvasRef.current, selectedOrder, hoverIndex, isDarkMode, CANVAS_SIZE);
+    if (phase === "FAN") {
+      drawFan(canvasRef.current, selectedIndex, hoverIndex, isDarkMode, CANVAS_SIZE);
     }
-  }, [selectedOrder, hoverIndex, isDarkMode, phase]);
+  }, [selectedIndex, hoverIndex, isDarkMode, phase]);
 
-  const toggleLine = useCallback((index) => {
+  useEffect(() => {
+    if (phase === "CROSS" && darkestLineAngle != null) {
+      drawCross(canvasRef.current, darkestLineAngle, sliderStep, isDarkMode, CANVAS_SIZE);
+    }
+  }, [phase, darkestLineAngle, sliderStep, isDarkMode]);
+
+  const selectLine = useCallback((index) => {
     if (index == null) return;
-    setSelectedOrder((prev) =>
-      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
-    );
+    setSelectedIndex(index);
   }, []);
 
   const updateHover = useCallback(
@@ -146,66 +201,71 @@ export function AstigmatismFanEngine({
 
   const handlePointerDown = useCallback(
     (e) => {
+      if (phase !== "FAN") return;
       e.preventDefault();
       isTouchRef.current = e.pointerType === "touch";
       const pt = coordsFromEvent(e.clientX, e.clientY);
       if (!pt) return;
       const index = nearestLineIndex(pt.x, pt.y, CANVAS_SIZE, hitRadius());
-      toggleLine(index);
+      selectLine(index);
     },
-    [coordsFromEvent, hitRadius, toggleLine]
+    [phase, coordsFromEvent, hitRadius, selectLine]
   );
 
   const handlePointerMove = useCallback(
     (e) => {
+      if (phase !== "FAN") return;
       isTouchRef.current = e.pointerType === "touch";
       updateHover(e.clientX, e.clientY);
     },
-    [updateHover]
+    [phase, updateHover]
   );
 
   const handlePointerLeave = useCallback(() => {
     setHoverIndex(null);
   }, []);
 
-  const submit = useCallback(() => {
-    if (selectedOrder.length === 0) return;
-    const selectedAngles = selectedOrder.map(lineAngleDeg);
-    const { primaryAxis, uncertain } = computePrimaryAxis(selectedAngles);
-    const axisFromLines = linesToAxis(selectedOrder);
-    const axis = primaryAxis ?? axisFromLines;
-    const cyl = linesToCylinder(selectedOrder, false);
-    const confidence = uncertain ? 0.45 : selectedOrder.length === 1 ? 0.75 : 0.65;
+  const beginCrossPhase = useCallback(() => {
+    if (selectedIndex == null) return;
+    setSliderStep(0);
+    setPhase("CROSS");
+  }, [selectedIndex]);
 
+  const finishCrossPhase = useCallback(() => {
+    const cyl = cylinderFromNormalizationStep(sliderStep);
     onComplete({
       cyl,
-      axis,
-      primaryAxis: axis,
-      selectedAngle: axis,
-      selectedAngles,
-      selectedLines: selectedOrder,
-      axisUncertain: uncertain,
-      confidence,
+      axis: prescriptionAxis,
+      darkestLineAngle,
+      prescriptionAxis,
+      normalizationStep: sliderStep,
+      selectedLines: [selectedIndex],
+      selectedAngles: darkestLineAngle != null ? [darkestLineAngle] : [],
+      axisUncertain: false,
+      confidence: sliderStep === 0 ? 0.8 : 0.85,
       allEqual: false,
     });
-  }, [selectedOrder, onComplete]);
+  }, [sliderStep, prescriptionAxis, darkestLineAngle, selectedIndex, onComplete]);
 
   const handleAllEqual = useCallback(() => {
     onComplete({
       cyl: 0,
       axis: null,
-      primaryAxis: null,
-      selectedAngle: null,
-      selectedAngles: [],
+      darkestLineAngle: null,
+      prescriptionAxis: null,
+      normalizationStep: 0,
       selectedLines: [],
+      selectedAngles: [],
       axisUncertain: false,
-      confidence: 0.7,
+      confidence: 0.75,
       allEqual: true,
     });
   }, [onComplete]);
 
-  const instructionText =
-    "Select all lines that look darkest, sharpest, or clearest. You can select more than one. Press Submit when done.";
+  const fanInstruction =
+    "Select the one line that looks darkest, thickest, or sharpest. If every line looks the same, choose All lines equal.";
+  const crossInstruction =
+    "Move the slider until the two lines look equally blurry or equally sharp, then tap Done.";
 
   if (phase === "INSTRUCTIONS") {
     return (
@@ -213,12 +273,16 @@ export function AstigmatismFanEngine({
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Astigmatism Fan Test
         </h2>
-        <p className={`text-lg mb-6 max-w-lg ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-          {instructionText}
+        <p className={`text-lg mb-4 max-w-lg ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+          {fanInstruction}
+        </p>
+        <p className={`text-sm mb-6 max-w-md ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+          Hold {VIEWING_DISTANCE.labelShort} from the screen. We first find your axis, then measure cylinder strength
+          with a short cross-line check.
         </p>
         <button
           type="button"
-          onClick={() => setPhase("TESTING")}
+          onClick={() => setPhase("FAN")}
           disabled={!visionOk}
           className={`px-10 py-4 rounded-full text-lg font-bold ${
             visionOk ? "bg-cyan-500 text-white" : "bg-slate-500/40 text-slate-400 cursor-not-allowed"
@@ -230,14 +294,71 @@ export function AstigmatismFanEngine({
     );
   }
 
+  if (phase === "CROSS") {
+    const cyl = cylinderFromNormalizationStep(sliderStep);
+    return (
+      <div className="flex flex-col items-center justify-center w-full h-full p-6">
+        <p className={`text-lg font-semibold mb-2 text-center max-w-lg ${isDarkMode ? "text-white" : "text-slate-800"}`}>
+          {crossInstruction}
+        </p>
+        <p className={`text-sm mb-4 text-center ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+          Axis {prescriptionAxis}° · Darkest line was {darkestLineAngle}°
+        </p>
+
+        <div
+          className="relative rounded-2xl overflow-hidden"
+          style={{ width: CANVAS_SIZE, height: CANVAS_SIZE }}
+        >
+          <canvas
+            ref={canvasRef}
+            style={{ display: "block", width: CANVAS_SIZE, height: CANVAS_SIZE }}
+          />
+        </div>
+
+        <div className="w-full max-w-md mt-6 px-2">
+          <div className="flex justify-between text-xs mb-2">
+            <span className={isDarkMode ? "text-slate-400" : "text-slate-500"}>Sharper line (A)</span>
+            <span className={isDarkMode ? "text-cyan-400" : "text-cyan-700"}>
+              CYL {cyl.toFixed(2)} D
+            </span>
+            <span className={isDarkMode ? "text-slate-400" : "text-slate-500"}>Blurrier line (B)</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={ASTIGMATISM_CYL_MAX_STEP}
+            step={1}
+            value={sliderStep}
+            onChange={(e) => setSliderStep(Number(e.target.value))}
+            className="w-full accent-cyan-500"
+            aria-label="Blur normalization slider"
+          />
+          <div className={`flex justify-between text-[10px] mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+            {Array.from({ length: ASTIGMATISM_CYL_MAX_STEP + 1 }, (_, i) => (
+              <span key={i}>{(i * -0.25).toFixed(2)}</span>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={finishCrossPhase}
+          className="mt-6 px-8 py-3 rounded-full font-bold bg-cyan-500 text-white hover:bg-cyan-400"
+        >
+          Done — lines look equal
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-6">
       <p className={`text-lg font-semibold mb-2 text-center max-w-lg ${isDarkMode ? "text-white" : "text-slate-800"}`}>
-        {instructionText}
+        {fanInstruction}
       </p>
-      {selectedOrder.length > 0 && (
+      {selectedIndex != null && (
         <p className={`text-sm mb-3 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}>
-          Selected: {selectedOrder.map((i) => `${lineAngleDeg(i)}°`).join(", ")} — tap again to deselect
+          Darkest line: {darkestLineAngle}° → prescription axis {prescriptionAxis}°
         </p>
       )}
 
@@ -269,11 +390,11 @@ export function AstigmatismFanEngine({
         </button>
         <button
           type="button"
-          onClick={submit}
-          disabled={selectedOrder.length === 0}
+          onClick={beginCrossPhase}
+          disabled={selectedIndex == null}
           className="px-8 py-3 rounded-full font-bold bg-cyan-500 text-white hover:bg-cyan-400 disabled:opacity-40"
         >
-          Submit
+          Continue
         </button>
       </div>
     </div>
