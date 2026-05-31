@@ -1,179 +1,83 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import { buildMetricsPayload, calcSessionStability, calcWeightedLandoltScore } from "../utils/metricsEngine";
-import { acuityToDiopter } from "../utils/refractionMath";
+import { acuityToScore } from "../utils/acuityUnits";
 import {
-  LANDOLT_DENOM_LADDER,
-  LANDOLT_START_INDEX,
-  getLandoltSize,
-  landoltDenomToAcuity,
-  getBrowserZoomWarning,
-} from "../utils/visionScaling";
+  LANDOLT_ACUITY_TIERS,
+  LANDOLT_START_TIER_INDEX,
+  LANDOLT_TRIALS_PER_TIER,
+  LANDOLT_PASS_MIN_CORRECT,
+  LANDOLT_TEST_DISTANCE_CM,
+  calculateLandoltAcuityResults,
+} from "../utils/landoltAcuity";
+import { getLandoltSizeFromDecimal, getBrowserZoomWarning } from "../utils/visionScaling";
+import { LandoltCSvg } from "./LandoltCSvg";
 
-const TOTAL_ROUNDS = 20;
-const FEEDBACK_MS = 500;
-const MAX_IDX = LANDOLT_DENOM_LADDER.length - 1;
+const MAX_TIER = LANDOLT_ACUITY_TIERS.length - 1;
+const FEEDBACK_MS = 450;
 
-/**
- * Eight gap orientations. `angle` is in screen-coordinate degrees:
- * 0 = right (East), 90 = down (South) — clockwise because canvas/SVG y grows down.
- */
-const DIRECTIONS = [
-  { key: "E",  label: "Right",       angle: 0 },
-  { key: "SE", label: "Down-right",  angle: 45 },
-  { key: "S",  label: "Down",        angle: 90 },
-  { key: "SW", label: "Down-left",   angle: 135 },
-  { key: "W",  label: "Left",        angle: 180 },
-  { key: "NW", label: "Up-left",     angle: 225 },
-  { key: "N",  label: "Up",          angle: 270 },
-  { key: "NE", label: "Up-right",    angle: 315 },
+const CARDINAL_DIRECTIONS = [
+  { key: "E", label: "Right", angle: 0, arrow: ArrowRight },
+  { key: "S", label: "Down", angle: 90, arrow: ArrowDown },
+  { key: "W", label: "Left", angle: 180, arrow: ArrowLeft },
+  { key: "N", label: "Up", angle: 270, arrow: ArrowUp },
 ];
 
-const deg2rad = (d) => (d * Math.PI) / 180;
+const KEY_TO_DIR = {
+  ArrowRight: "E",
+  ArrowDown: "S",
+  ArrowLeft: "W",
+  ArrowUp: "N",
+};
 
-/** Draw a Landolt C (ring with a gap) on a HiDPI canvas. */
-function drawLandoltC(canvas, gapAngleDeg, diameterPx, canvasCSSSize, grayVal) {
-  if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  const expected = Math.round(canvasCSSSize * dpr);
-  if (canvas.width !== expected || canvas.height !== expected) {
-    canvas.width = expected;
-    canvas.height = expected;
-    canvas.style.width = `${canvasCSSSize}px`;
-    canvas.style.height = `${canvasCSSSize}px`;
-  }
-
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width;
-  ctx.fillStyle = "rgb(250,250,250)";
-  ctx.fillRect(0, 0, W, W);
-
-  const cx = W / 2;
-  const cy = W / 2;
-  const diameter = diameterPx * dpr;
-  const stroke = diameter / 5;          // standard Landolt: stroke = gap = 1/5 of diameter
-  const midR = diameter / 2 - stroke / 2;
-  const halfGap = stroke / midR / 2;    // angular half-width of the gap (radians)
-  const a = deg2rad(gapAngleDeg);
-
-  ctx.strokeStyle = `rgb(${grayVal},${grayVal},${grayVal})`;
-  ctx.lineWidth = stroke;
-  ctx.beginPath();
-  // Arc spanning the full circle except the gap centred on angle `a`.
-  ctx.arc(cx, cy, midR, a + halfGap, a - halfGap + Math.PI * 2);
-  ctx.stroke();
-}
-
-/** SVG donut-wedge path for the clickable answer ring. */
-function wedgePath(cx, cy, rIn, rOut, a0, a1) {
-  const pt = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-  const [x0o, y0o] = pt(rOut, a0);
-  const [x1o, y1o] = pt(rOut, a1);
-  const [x1i, y1i] = pt(rIn, a1);
-  const [x0i, y0i] = pt(rIn, a0);
-  const large = a1 - a0 > Math.PI ? 1 : 0;
-  return `M ${x0o} ${y0o} A ${rOut} ${rOut} 0 ${large} 1 ${x1o} ${y1o} `
-    + `L ${x1i} ${y1i} A ${rIn} ${rIn} 0 ${large} 0 ${x0i} ${y0i} Z`;
+function pickRandomDirection() {
+  return CARDINAL_DIRECTIONS[Math.floor(Math.random() * CARDINAL_DIRECTIONS.length)];
 }
 
 /**
- * Answer selector — a large, fixed-size 8-segment ring. The user clicks the wedge
- * pointing toward the gap they saw on the (variably sized) reference ring above.
- * This decouples motor precision from visual acuity: only the small top ring tests sight.
- */
-function AnswerRing({ onPick, disabled, isDarkMode, highlight }) {
-  const SIZE = 240;
-  const cx = SIZE / 2;
-  const cy = SIZE / 2;
-  const rOut = 112;
-  const rIn = 56;
-  const gapPad = deg2rad(3); // thin white separators between wedges
-  const half = deg2rad(45) / 2;
-
-  return (
-    <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="select-none">
-      {DIRECTIONS.map((d) => {
-        const a = deg2rad(d.angle);
-        const path = wedgePath(cx, cy, rIn, rOut, a - half + gapPad, a + half - gapPad);
-        const isHi = highlight === d.key;
-        const base = isDarkMode ? "#1e293b" : "#0f172a";
-        return (
-          <path
-            key={d.key}
-            d={path}
-            fill={isHi ? "#06b6d4" : base}
-            stroke={isDarkMode ? "#334155" : "#ffffff"}
-            strokeWidth={2}
-            style={{ cursor: disabled ? "default" : "pointer", transition: "fill 0.12s" }}
-            onClick={() => !disabled && onPick(d.key)}
-          />
-        );
-      })}
-      {/* center hub */}
-      <circle cx={cx} cy={cy} r={rIn - 6} fill={isDarkMode ? "#0f172a" : "#f1f5f9"} />
-      <text
-        x={cx} y={cy} textAnchor="middle" dominantBaseline="central"
-        fontSize="13" fontWeight="700"
-        fill={isDarkMode ? "#64748b" : "#94a3b8"}
-      >
-        tap gap
-      </text>
-    </svg>
-  );
-}
-
-/**
- * Landolt C (Tumbling Ring) acuity test with an adaptive 1-up/1-down staircase.
- *
- * Mechanics requested:
- *   correct answer → ring shrinks one acuity step (harder)
- *   wrong answer   → ring grows one acuity step (easier)
- * The staircase brackets the patient's true threshold; the threshold acuity is
- * estimated from the mean of the staircase reversals, then mapped to a Snellen
- * value and an approximate spherical diopter.
- *
- * Scoring (calcWeightedLandoltScore) rewards correct answers on SMALL rings far
- * more than on large ones, and penalises misses on LARGE rings far more than on
- * small ones — so a lucky/skilled small-ring hit is worth more, and an easy
- * large-ring miss costs more.
+ * Landolt C resolving-power test @ 50 cm (ISO 8596 ring geometry).
+ * 5 random orientations per tier; pass ≥ 4/5 → next tier; fail → stop and score last passed tier.
  */
 export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete }) {
   const [phase, setPhase] = useState("INSTRUCTIONS");
-  const [levelIndex, setLevelIndex] = useState(LANDOLT_START_INDEX);
-  const [gapDir, setGapDir] = useState(DIRECTIONS[0].key);
-  const [feedback, setFeedback] = useState(null); // "correct" | "wrong" | null
+  const [tierIndex, setTierIndex] = useState(LANDOLT_START_TIER_INDEX);
+  const [trialInTier, setTrialInTier] = useState(0);
+  const [gapDir, setGapDir] = useState(CARDINAL_DIRECTIONS[0].key);
+  const [feedback, setFeedback] = useState(null);
   const [picked, setPicked] = useState(null);
-  const [roundNum, setRoundNum] = useState(0);
+  const [tierCorrect, setTierCorrect] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 
-  const canvasRef = useRef(null);
   const roundsRef = useRef([]);
-  const reversalsRef = useRef([]);   // ladder indices at each staircase reversal
-  const moveDirRef = useRef(null);   // "down" (after correct) | "up" (after wrong)
+  const tierCorrectRef = useRef(0);
+  const trialInTierRef = useRef(0);
   const roundStartRef = useRef(Date.now());
-  const levelRef = useRef(LANDOLT_START_INDEX);
-  const gapRef = useRef(DIRECTIONS[0].key);
+  const tierRef = useRef(LANDOLT_START_TIER_INDEX);
+  const gapRef = useRef(CARDINAL_DIRECTIONS[0].key);
   const waitingRef = useRef(false);
   const phaseRef = useRef("INSTRUCTIONS");
   const pausedRef = useRef(false);
   const pauseCountRef = useRef(0);
   const wasPausedRef = useRef(false);
 
-  levelRef.current = levelIndex;
+  tierRef.current = tierIndex;
   gapRef.current = gapDir;
   phaseRef.current = phase;
   pausedRef.current = isPaused;
+  tierCorrectRef.current = tierCorrect;
 
-  const denom = LANDOLT_DENOM_LADDER[levelIndex];
-  const ringPx = getLandoltSize(denom, ppi);
-  // Canvas large enough for the biggest rung at this PPI, plus margin.
-  const canvasCSSSize = Math.max(260, getLandoltSize(LANDOLT_DENOM_LADDER[0], ppi) + 48);
+  const tier = LANDOLT_ACUITY_TIERS[tierIndex];
+  const decimal = tier.decimal;
+  const ringPx = getLandoltSizeFromDecimal(decimal, ppi, LANDOLT_TEST_DISTANCE_CM);
+  const canvasCSSSize = Math.max(
+    260,
+    getLandoltSizeFromDecimal(LANDOLT_ACUITY_TIERS[0].decimal, ppi, LANDOLT_TEST_DISTANCE_CM) + 48
+  );
 
   const zoomWarning = getBrowserZoomWarning(
     parseFloat(localStorage.getItem("visuar_calibration_dpr") || "0")
   );
 
-  // Pause handling — mirror OrientationEngine: count interruptions when vision drops.
   useEffect(() => {
     if (phase !== "TESTING") return;
     const nowPaused = !visionOk;
@@ -182,72 +86,72 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
     setIsPaused(nowPaused);
   }, [visionOk, phase]);
 
-  // Reset the response timer when resuming from a pause.
   useEffect(() => {
     if (!isPaused && waitingRef.current) roundStartRef.current = Date.now();
   }, [isPaused]);
 
-  // Redraw the ring whenever level / gap / phase changes.
-  useEffect(() => {
-    if (phase === "TESTING" && canvasRef.current) {
-      const dir = DIRECTIONS.find((d) => d.key === gapDir) || DIRECTIONS[0];
-      drawLandoltC(canvasRef.current, dir.angle, ringPx, canvasCSSSize, 30);
-    }
-  }, [gapDir, levelIndex, phase, ringPx, canvasCSSSize]);
-
-  const startRound = useCallback((li) => {
-    const dir = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
-    setLevelIndex(li);
+  const beginTrial = useCallback((ti, trialIdx) => {
+    const dir = pickRandomDirection();
+    setTierIndex(ti);
+    setTrialInTier(trialIdx);
+    trialInTierRef.current = trialIdx;
     setGapDir(dir.key);
     setPicked(null);
+    setFeedback(null);
     waitingRef.current = true;
     roundStartRef.current = Date.now();
   }, []);
 
-  const finish = useCallback(() => {
-    const rounds = roundsRef.current;
-    const metrics = buildMetricsPayload(rounds, MAX_IDX);
-    const sessionStability = calcSessionStability(pauseCountRef.current);
+  const finish = useCallback(
+    ({ failedTierIndex, completedAll = false }) => {
+      const rounds = roundsRef.current;
+      const metrics = buildMetricsPayload(rounds, MAX_TIER);
+      const sessionStability = calcSessionStability(pauseCountRef.current);
+      const report = calculateLandoltAcuityResults(failedTierIndex, { completedAll });
 
-    // ── Threshold estimate from staircase reversals ──
-    const reversals = reversalsRef.current;
-    let thresholdLevel;
-    if (reversals.length >= 4) {
-      const used = reversals.slice(2);             // drop the first two (still homing in)
-      thresholdLevel = used.reduce((a, b) => a + b, 0) / used.length;
-    } else if (metrics.precisionLevel != null) {
-      thresholdLevel = metrics.precisionLevel;     // fallback: finest correct rung
-    } else {
-      thresholdLevel = LANDOLT_START_INDEX;
-    }
+      const landoltScore = calcWeightedLandoltScore(
+        rounds,
+        metrics.consistencyScore,
+        sessionStability,
+        metrics.fatigueLevel,
+        metrics.avgResponseTime,
+        MAX_TIER
+      );
 
-    // Interpolate the (fractional) ladder index into a Snellen denominator.
-    const lo = Math.max(0, Math.floor(thresholdLevel));
-    const hi = Math.min(MAX_IDX, Math.ceil(thresholdLevel));
-    const frac = thresholdLevel - lo;
-    const thresholdDenom =
-      LANDOLT_DENOM_LADDER[lo] + (LANDOLT_DENOM_LADDER[hi] - LANDOLT_DENOM_LADDER[lo]) * frac;
+      setPhase("COMPLETE");
+      onTestComplete({
+        landoltScore: Math.max(landoltScore, acuityToScore(String(report.decimalScore))),
+        ...report,
+        thresholdAcuity: report.snellen6,
+        thresholdDecimal: report.decimalScore,
+        thresholdSnellen20: report.snellen20,
+        estimatedSphereD: report.estimatedDiopterD,
+        ...metrics,
+        sessionStability,
+        pauseCount: pauseCountRef.current,
+        protocol: "landolt_tier_5x4of5",
+        testDistanceCm: LANDOLT_TEST_DISTANCE_CM,
+      });
+    },
+    [onTestComplete]
+  );
 
-    const thresholdAcuity = landoltDenomToAcuity(thresholdDenom);
-    const estimatedSphereD = acuityToDiopter(`6/${Math.round(thresholdDenom)}`);
-
-    const landoltScore = calcWeightedLandoltScore(
-      rounds, metrics.consistencyScore, sessionStability,
-      metrics.fatigueLevel, metrics.avgResponseTime, MAX_IDX,
-    );
-
-    setPhase("COMPLETE");
-    onTestComplete({
-      landoltScore,
-      thresholdAcuity,
-      thresholdDenom: Math.round(thresholdDenom * 10) / 10,
-      estimatedSphereD,
-      reversals: reversals.length,
-      ...metrics,
-      sessionStability,
-      pauseCount: pauseCountRef.current,
-    });
-  }, [onTestComplete]);
+  const advanceAfterTier = useCallback(
+    (passed, failedOrCurrentIndex) => {
+      if (passed) {
+        if (failedOrCurrentIndex >= MAX_TIER) {
+          finish({ failedTierIndex: MAX_TIER + 1, completedAll: true });
+          return;
+        }
+        setTierCorrect(0);
+        tierCorrectRef.current = 0;
+        beginTrial(failedOrCurrentIndex + 1, 0);
+        return;
+      }
+      finish({ failedTierIndex: failedOrCurrentIndex });
+    },
+    [beginTrial, finish]
+  );
 
   const processAnswer = useCallback(
     (answerKey) => {
@@ -256,54 +160,80 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
 
       const rt = Date.now() - (roundStartRef.current || Date.now());
       const correct = answerKey === gapRef.current;
-      const curLevel = levelRef.current;
+      const ti = tierRef.current;
+      const trialIdx = trialInTierRef.current;
 
-      roundsRef.current.push({ levelIndex: curLevel, correct, responseTime: rt, answer: answerKey, gap: gapRef.current });
+      roundsRef.current.push({
+        levelIndex: ti,
+        tierDecimal: LANDOLT_ACUITY_TIERS[ti].decimal,
+        correct,
+        responseTime: rt,
+        answer: answerKey,
+        gap: gapRef.current,
+      });
+
       setPicked(answerKey);
       setFeedback(correct ? "correct" : "wrong");
-      const completed = roundsRef.current.length;
-      setRoundNum(completed);
 
-      // Staircase move: correct → down (smaller), wrong → up (larger).
-      const move = correct ? "down" : "up";
-      if (moveDirRef.current && move !== moveDirRef.current) {
-        reversalsRef.current.push(curLevel); // direction flipped → reversal
-      }
-      moveDirRef.current = move;
+      const nextCorrect = tierCorrectRef.current + (correct ? 1 : 0);
+      tierCorrectRef.current = nextCorrect;
+      setTierCorrect(nextCorrect);
 
-      const nextLevel = correct
-        ? Math.min(curLevel + 1, MAX_IDX)
-        : Math.max(curLevel - 1, 0);
+      const completedTrials = trialIdx + 1;
 
       setTimeout(() => {
         setFeedback(null);
-        if (completed >= TOTAL_ROUNDS) {
-          finish();
+        if (completedTrials >= LANDOLT_TRIALS_PER_TIER) {
+          const passed = nextCorrect >= LANDOLT_PASS_MIN_CORRECT;
+          advanceAfterTier(passed, ti);
         } else {
-          startRound(nextLevel);
+          beginTrial(ti, completedTrials);
         }
       }, FEEDBACK_MS);
     },
-    [startRound, finish]
+    [beginTrial, advanceAfterTier]
   );
+
+  useEffect(() => {
+    if (phase !== "TESTING") return;
+    const onKey = (e) => {
+      const dir = KEY_TO_DIR[e.key];
+      if (!dir || feedback) return;
+      e.preventDefault();
+      processAnswer(dir);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, feedback, processAnswer]);
 
   const handleStart = useCallback(() => {
     roundsRef.current = [];
-    reversalsRef.current = [];
-    moveDirRef.current = null;
     pauseCountRef.current = 0;
     wasPausedRef.current = false;
-    setRoundNum(0);
+    setTierCorrect(0);
+    tierCorrectRef.current = 0;
     setPhase("TESTING");
-    startRound(LANDOLT_START_INDEX);
-  }, [startRound]);
+    beginTrial(LANDOLT_START_TIER_INDEX, 0);
+  }, [beginTrial]);
 
-  // ─── Instructions ───────────────────────────────────────
+  const gapAngle = CARDINAL_DIRECTIONS.find((d) => d.key === gapDir)?.angle ?? 0;
+
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
-        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
-          <svg viewBox="0 0 24 24" className={`w-9 h-9 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+        <div
+          className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${
+            isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"
+          }`}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            className={`w-9 h-9 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+          >
             <path d="M12 3a9 9 0 1 0 4 0.8" />
           </svg>
         </div>
@@ -311,20 +241,38 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
           Landolt C Acuity Test
         </h2>
         <p className={`text-base mb-3 max-w-md ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-          A broken ring (like a <strong>C</strong>) appears with its gap facing one of eight
-          directions. Find the gap, then tap the matching wedge on the answer dial below.
+          Measures <strong>resolving power</strong> — how small a gap you can see — without letter guessing.
+          Test distance: <strong>{LANDOLT_TEST_DISTANCE_CM} cm</strong>.
         </p>
-        <ul className={`text-sm text-left mb-6 space-y-2 max-w-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-          <li className="flex gap-2"><span className="text-cyan-400">◆</span><span><strong>Correct → the ring shrinks.</strong> Keep going as small as you can read.</span></li>
-          <li className="flex gap-2"><span className="text-cyan-400">◆</span><span><strong>Wrong → the ring grows back.</strong> It self-adjusts to your exact limit.</span></li>
-          <li className="flex gap-2"><span className="text-cyan-400">◆</span><span>Getting a <strong>tiny</strong> ring right scores big; missing a <strong>large</strong> one costs the most.</span></li>
-          <li className="flex gap-2"><span className="text-cyan-400">◆</span><span>{TOTAL_ROUNDS} rounds. Cover the eye not being tested.</span></li>
+        <ul
+          className={`text-sm text-left mb-6 space-y-2 max-w-sm ${
+            isDarkMode ? "text-slate-400" : "text-slate-500"
+          }`}
+        >
+          <li className="flex gap-2">
+            <span className="text-cyan-400">◆</span>
+            <span>
+              Start at decimal <strong>0.29</strong> (20/70). <strong>5 trials</strong> per size; pass with{" "}
+              <strong>≥ 4/5</strong> correct.
+            </span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-cyan-400">◆</span>
+            <span>Pass → smaller ring. <strong>Fail → test stops</strong>; score = last tier you cleared.</span>
+          </li>
+          <li className="flex gap-2">
+            <span className="text-cyan-400">◆</span>
+            <span>Arrow buttons or keyboard (↑ ↓ ← →).</span>
+          </li>
         </ul>
         <button
+          type="button"
           onClick={handleStart}
           disabled={!visionOk}
           className={`px-10 py-4 rounded-full text-lg font-bold transition-all shadow-lg ${
-            visionOk ? "bg-cyan-500 hover:bg-cyan-400 text-white" : "bg-slate-500/40 text-slate-400 cursor-not-allowed"
+            visionOk
+              ? "bg-cyan-500 hover:bg-cyan-400 text-white"
+              : "bg-slate-500/40 text-slate-400 cursor-not-allowed"
           }`}
         >
           {visionOk ? "Start Test" : "Waiting for camera…"}
@@ -338,7 +286,6 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
     );
   }
 
-  // ─── Testing ────────────────────────────────────────────
   if (phase === "TESTING") {
     return (
       <div className="relative flex flex-col items-center justify-center w-full h-full p-4 select-none">
@@ -358,42 +305,80 @@ export function LandoltCEngine({ ppi = 96, isDarkMode, visionOk, onTestComplete 
           </div>
         )}
 
-        <div className={`text-sm font-bold mb-1 tabular-nums ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-          Round {Math.min(roundNum + 1, TOTAL_ROUNDS)} / {TOTAL_ROUNDS}
+        <div
+          className={`text-sm font-bold mb-1 tabular-nums ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}
+        >
+          Decimal {decimal} · {tier.snellen20} · {tier.snellen6}
           <span className="mx-2 opacity-40">·</span>
-          <span className="font-mono">{landoltDenomToAcuity(denom)}</span>
+          Trial {trialInTier + 1}/{LANDOLT_TRIALS_PER_TIER}
+          <span className="mx-2 opacity-40">·</span>
+          {tierCorrect}/{LANDOLT_TRIALS_PER_TIER} correct (need {LANDOLT_PASS_MIN_CORRECT})
         </div>
         <p className={`text-xs mb-3 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
           Which way is the gap facing?
         </p>
 
-        {/* Reference ring (the actual acuity stimulus) */}
         <div
           className={`rounded-2xl overflow-hidden flex items-center justify-center transition-all duration-100 ${
-            feedback === "correct" ? "ring-4 ring-green-500"
-            : feedback === "wrong" ? "ring-4 ring-red-500"
-            : isDarkMode ? "ring-1 ring-slate-700" : "ring-1 ring-slate-200"
+            feedback === "correct"
+              ? "ring-4 ring-green-500"
+              : feedback === "wrong"
+                ? "ring-4 ring-red-500"
+                : isDarkMode
+                  ? "ring-1 ring-slate-700"
+                  : "ring-1 ring-slate-200"
           }`}
-          style={{ width: canvasCSSSize, height: canvasCSSSize, position: "relative", background: "rgb(250,250,250)" }}
+          style={{
+            width: canvasCSSSize,
+            height: canvasCSSSize,
+            position: "relative",
+            background: "rgb(250,250,250)",
+          }}
         >
-          <canvas ref={canvasRef} style={{ display: "block" }} />
+          <div className="flex items-center justify-center w-full h-full">
+            <LandoltCSvg size={ringPx} gapAngleDeg={gapAngle} grayVal={30} />
+          </div>
           {feedback && (
-            <div className={`absolute inset-0 flex items-center justify-center text-6xl font-black ${feedback === "correct" ? "text-green-500" : "text-red-500"}`}
-              style={{ background: "rgba(0,0,0,0.06)" }}>
+            <div
+              className={`absolute inset-0 flex items-center justify-center text-6xl font-black ${
+                feedback === "correct" ? "text-green-500" : "text-red-500"
+              }`}
+              style={{ background: "rgba(0,0,0,0.06)" }}
+            >
               {feedback === "correct" ? "✓" : "✗"}
             </div>
           )}
         </div>
 
-        {/* Answer dial */}
-        <div className="mt-4">
-          <AnswerRing
-            onPick={processAnswer}
-            disabled={!!feedback || isPaused}
-            isDarkMode={isDarkMode}
-            highlight={feedback ? picked : null}
-          />
+        <div className="mt-5 grid grid-cols-2 gap-3 max-w-xs w-full">
+          {CARDINAL_DIRECTIONS.map((d) => {
+            const Icon = d.arrow;
+            const isHi = feedback && picked === d.key;
+            return (
+              <button
+                key={d.key}
+                type="button"
+                disabled={!!feedback || isPaused}
+                onClick={() => processAnswer(d.key)}
+                className={`flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-sm transition-all ${
+                  isHi
+                    ? feedback === "correct"
+                      ? "bg-green-500 text-white"
+                      : "bg-red-500 text-white"
+                    : isDarkMode
+                      ? "bg-slate-800 hover:bg-slate-700 text-white"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-800"
+                } ${feedback || isPaused ? "opacity-60 cursor-not-allowed" : ""}`}
+              >
+                <Icon className="w-6 h-6" />
+                {d.label}
+              </button>
+            );
+          })}
         </div>
+        <p className={`text-[10px] mt-2 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+          Or use keyboard arrow keys
+        </p>
       </div>
     );
   }

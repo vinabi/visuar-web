@@ -25,6 +25,8 @@ import { loadPersistedTestResult } from "../utils/lastTestResult";
 import { VISION_FOCUS_LABELS } from "../utils/visionFocus";
 import { API_URL } from "../lib/config";
 import { ScreeningResultCards, BilingualAIExplanation } from "../components/ScreeningResultCards";
+import { LandoltAcuitySummary } from "../components/LandoltAcuitySummary";
+import { landoltReportFromStoredDecimal } from "../utils/landoltAcuity";
 import { TestPrescriptionCard } from "../components/TestPrescriptionCard";
 import { enrichLegacyEyeEstimate, computeSingleDiopterD } from "../utils/finalEstimate";
 import { correctionModeLabel } from "../utils/correctionMode";
@@ -352,17 +354,39 @@ export default function ResultsPage() {
     aiAnalysis: fetchedAI,
   } : null;
 
+  const dbLandoltParsed = fromDB && isLandoltTest && fetchedRecord.result_json
+    ? parseSafe(fetchedRecord.result_json, null)
+    : null;
+
+  const dbLandoltLeft =
+    dbLandoltParsed?.left || landoltReportFromStoredDecimal(fetchedRecord?.left_eye_acuity);
+  const dbLandoltRight =
+    dbLandoltParsed?.right || landoltReportFromStoredDecimal(fetchedRecord?.right_eye_acuity);
+
   const dbLandoltData = fromDB && isLandoltTest ? {
     landoltScore: fetchedRecord.overall_score,
-    leftAcuity: fetchedRecord.left_eye_acuity,
-    rightAcuity: fetchedRecord.right_eye_acuity,
-    leftDiopter: fetchedRecord.left_eye_diopter,
-    rightDiopter: fetchedRecord.right_eye_diopter,
-    thresholdAcuity: fetchedRecord.right_eye_acuity || fetchedRecord.left_eye_acuity,
-    accuracy: 0, avgResponseTime: 0,
-    fatigueLevel: "None", consistencyScore: 100, sessionStability: 100,
-    pauseCount: 0, precisionLevel: 0, levelProgression: [], responseTimes: [],
-    roundResults: [], fastestResponse: 0, slowestResponse: 0,
+    leftEye: dbLandoltLeft,
+    rightEye: dbLandoltRight,
+    leftAcuity: dbLandoltLeft?.snellen6,
+    rightAcuity: dbLandoltRight?.snellen6,
+    leftDecimal: dbLandoltLeft?.decimalScore,
+    rightDecimal: dbLandoltRight?.decimalScore,
+    thresholdDecimal: dbLandoltRight?.decimalScore,
+    thresholdAcuity: dbLandoltRight?.snellen6,
+    thresholdSnellen20: dbLandoltRight?.snellen20,
+    interpretation: dbLandoltRight?.interpretation,
+    accuracy: 0,
+    avgResponseTime: 0,
+    fatigueLevel: "None",
+    consistencyScore: 100,
+    sessionStability: 100,
+    pauseCount: 0,
+    precisionLevel: 0,
+    levelProgression: [],
+    responseTimes: [],
+    roundResults: [],
+    fastestResponse: 0,
+    slowestResponse: 0,
     aiAnalysis: fetchedAI,
   } : null;
 
@@ -844,15 +868,26 @@ export default function ResultsPage() {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
     const fmtD = (d) => (d == null ? "—" : `${d > 0 ? "+" : ""}${Number(d).toFixed(2)} D`);
 
+    const bestDecimal = landoltData.thresholdDecimal ?? landoltData.rightDecimal ?? landoltData.leftDecimal;
+    const bestSnellen20 = landoltData.thresholdSnellen20 ?? landoltData.rightSnellen20;
+    const bestInterpretation = landoltData.interpretation ?? landoltData.rightInterpretation;
+
     const findings = [];
-    const bestAcuity = thresholdAcuity || rightAcuity || leftAcuity;
-    if (landoltScore >= 70) {
-      findings.push({ type: "success", title: "Sharp Resolving Power", description: `You reliably resolved rings down to about ${bestAcuity}, indicating good high-detail acuity.` });
-    } else {
-      findings.push({ type: "warning", title: "Reduced Acuity Threshold", description: `Your smallest reliably resolved ring was about ${bestAcuity}. Blur at fine detail can indicate uncorrected refractive error.` });
+    if (bestInterpretation) {
+      findings.push({
+        type: bestDecimal >= 1 ? "success" : bestDecimal >= 0.5 ? "info" : "warning",
+        title: "Resolving power result",
+        description: bestInterpretation,
+      });
     }
-    if (leftAcuity && rightAcuity && leftAcuity !== rightAcuity) {
-      findings.push({ type: "info", title: "Between-Eye Difference", description: `Left eye ${leftAcuity} vs right eye ${rightAcuity}. A notable difference between eyes is worth a professional check.` });
+    const bestAcuity = bestSnellen20 || thresholdAcuity || rightAcuity || leftAcuity;
+    if (landoltScore >= 70) {
+      findings.push({ type: "success", title: "Sharp Resolving Power", description: `You reliably resolved gaps down to decimal ${bestDecimal ?? "—"} (${bestAcuity}).` });
+    } else {
+      findings.push({ type: "warning", title: "Reduced Acuity Threshold", description: `Your last passed tier was decimal ${bestDecimal ?? "—"} (${bestAcuity}). Fine-detail blur may indicate uncorrected refractive error.` });
+    }
+    if (landoltData.leftDecimal != null && landoltData.rightDecimal != null && landoltData.leftDecimal !== landoltData.rightDecimal) {
+      findings.push({ type: "info", title: "Between-Eye Difference", description: `Left decimal ${landoltData.leftDecimal} vs right ${landoltData.rightDecimal}. Worth mentioning at an eye exam.` });
     }
     if (fatigueLevel !== "None") findings.push({ type: "info", title: `${fatigueLevel} Visual Fatigue`, description: "Performance declined over the session. Rest your eyes before retesting." });
     findings.push({ type: "info", title: "Screening Estimate", description: "This is a screening tool, not a clinical diagnosis. Confirm with an eye care professional." });
@@ -863,58 +898,38 @@ export default function ResultsPage() {
     if (fatigueLevel !== "None") recs.push("Practice the 20-20-20 rule: every 20 minutes, look 20 feet away for 20 seconds.");
     recs.push("Re-run this test in good, glare-free lighting to confirm your threshold.");
 
-    const eyeCards = [
-      { label: "Left Eye", data: landoltData.leftEye, acuity: leftAcuity, diopter: leftDiopter },
-      { label: "Right Eye", data: landoltData.rightEye, acuity: rightAcuity, diopter: rightDiopter },
-    ];
-
     return (
       <ResultsShell title="Landolt C Acuity Results" date={dateStr} isDarkMode={isDarkMode}>
+        <p className={`text-sm mb-6 leading-relaxed ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+          Landolt C measures <strong>resolving power</strong> (smallest gap you can distinguish) — not letter recognition.
+          Results are stored as <strong>decimal acuity</strong> and shown in clinic-style Snellen formats.
+        </p>
+
         {/* Hero score */}
         <div className={`rounded-2xl p-6 mb-6 ${isDarkMode ? "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20" : "bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100"}`}>
           <div className="flex flex-col md:flex-row items-center gap-8">
             <ScoreRing score={landoltScore} size={130} label="Score" sub={label} />
             <div className="flex-1 text-center md:text-left">
               <h2 className={`text-2xl font-black mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                Acuity Score: <span style={{ color: scoreHex(landoltScore) }}>{label}</span>
+                Best eye (right): decimal <span style={{ color: scoreHex(landoltScore) }}>{bestDecimal ?? "—"}</span>
               </h2>
-              <p className={`text-base mb-4 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                Estimated threshold <strong>{bestAcuity}</strong> · {accuracy}% accuracy
+              <p className={`text-base mb-2 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                {bestSnellen20 || bestAcuity} · {accuracy}% session accuracy
               </p>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { v: bestAcuity || "—", l: "Best Acuity" },
-                  { v: leftAcuity || "—", l: "Left Eye" },
-                  { v: rightAcuity || "—", l: "Right Eye" },
-                ].map((s, i) => (
-                  <div key={i} className={`rounded-xl p-3 text-center ${isDarkMode ? "bg-slate-800/60" : "bg-white/80 border border-slate-100"}`}>
-                    <div className={`text-lg font-black ${isDarkMode ? "text-white" : "text-slate-800"}`}>{s.v}</div>
-                    <div className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
+              {bestInterpretation && (
+                <p className={`text-sm italic ${isDarkMode ? "text-cyan-300" : "text-cyan-800"}`}>
+                  {bestInterpretation}
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Per-eye comparison */}
+        {/* Per-eye structured results */}
         {landoltData.leftEye && landoltData.rightEye && (
           <div className="grid md:grid-cols-2 gap-4 mb-6">
-            {eyeCards.map(({ label: eyeLabel, data: eye, acuity, diopter }) => (
-              <div key={eyeLabel} className={`rounded-2xl p-5 ${panel}`}>
-                <h4 className={`font-bold mb-3 flex items-center gap-2 text-sm ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                  <Eye className="w-4 h-4 text-cyan-500" /> {eyeLabel}
-                </h4>
-                <div className="flex items-center gap-4">
-                  <ScoreRing score={eye?.landoltScore ?? landoltScore} size={72} label="Score" />
-                  <div className="space-y-1 text-sm">
-                    <div className={isDarkMode ? "text-slate-300" : "text-slate-700"}>Acuity: <strong>{acuity || "—"}</strong></div>
-                    <div className={isDarkMode ? "text-slate-300" : "text-slate-700"}>Est. sphere: <strong>{fmtD(diopter)}</strong></div>
-                    <div className={isDarkMode ? "text-slate-400" : "text-slate-500"}>Accuracy: {eye?.accuracy ?? "—"}%</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+            <LandoltAcuitySummary eye={landoltData.leftEye} title="Left eye" isDarkMode={isDarkMode} />
+            <LandoltAcuitySummary eye={landoltData.rightEye} title="Right eye" isDarkMode={isDarkMode} />
           </div>
         )}
 

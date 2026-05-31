@@ -1,15 +1,25 @@
-const STEPS = [
+const FAR_STEPS = [
   { id: "snellen", label: "Acuity" },
   { id: "duochrome", label: "Duochrome" },
   { id: "simulator", label: "Refine" },
   { id: "astigmatism", label: "Astigmatism" },
 ];
 
-export function RefractionBatteryProgress({ currentStep, isDarkMode }) {
-  const idx = STEPS.findIndex((s) => s.id === currentStep);
+const NEAR_STEPS = [
+  { id: "jaeger", label: "Near acuity" },
+  { id: "near_far", label: "Near–far" },
+  { id: "duochrome", label: "Duochrome" },
+  { id: "simulator", label: "Refine" },
+  { id: "astigmatism", label: "Astigmatism" },
+  { id: "snellen", label: "Distance (secondary)" },
+];
+
+export function RefractionBatteryProgress({ currentStep, isDarkMode, variant = "far" }) {
+  const steps = variant === "near" ? NEAR_STEPS : FAR_STEPS;
+  const idx = steps.findIndex((s) => s.id === currentStep);
   return (
     <div className="flex flex-wrap justify-center gap-2 mb-4 px-4">
-      {STEPS.map((step, i) => {
+      {steps.map((step, i) => {
         const done = i < idx;
         const active = i === idx;
         return (

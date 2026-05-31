@@ -378,7 +378,7 @@ export function getRefractionRoundLetters(roundIndex, quickMode = false) {
 export const ASTIGMATISM_FAN_ROUNDS = 1;
 export const ASTIGMATISM_FAN_LINE_COUNT = 12;
 
-const QUICK_MODE_TEST_IDS = new Set(["refraction-battery", "complete"]);
+const QUICK_MODE_TEST_IDS = new Set(["refraction-battery", "complete", "quick-screener"]);
 
 /**
  * Battery and complete assessment default to quick (7 steps).

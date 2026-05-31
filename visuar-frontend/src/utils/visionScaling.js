@@ -19,6 +19,14 @@ import {
   TEST_DISTANCE_CM,
   VIEWING_DISTANCE,
 } from "./viewingDistance";
+import {
+  LANDOLT_ACUITY_TIERS,
+  LANDOLT_DECIMAL_LADDER,
+  LANDOLT_START_TIER_INDEX,
+  LANDOLT_TEST_DISTANCE_CM,
+  LANDOLT_TRIALS_PER_TIER,
+  LANDOLT_PASS_MIN_CORRECT,
+} from "./landoltAcuity";
 
 /** Render base — scaled via transform to bypass browser minimum font-size (~12px). */
 export const OPTOTYPE_BASE_FONT_PX = 16;
@@ -145,37 +153,71 @@ export function getTumblingESize(levelIndex, ppi) {
   return Math.round(mmToPx(mm, ppi));
 }
 
-// ─── Landolt C (Tumbling Ring) acuity ──────────────────────────────────────────
+// ─── Landolt C (ISO 8596) ─────────────────────────────────────────────────────
+
+/** ISO 8596 reference table distance (mm formula published at 50 cm). */
+export const LANDOLT_ISO_REF_DISTANCE_CM = 50;
+
+/** Outer diameter (mm) at decimal 1.0 and 50 cm: D = 3.636 / decimal. */
+export const LANDOLT_ISO_DIAMETER_MM_AT_DECIMAL_1 = 3.636;
+
+/** Gap width and stroke thickness = 1/5 of outer diameter. */
+export const LANDOLT_STROKE_GAP_RATIO = 1 / 5;
+
+export {
+  LANDOLT_ACUITY_TIERS,
+  LANDOLT_DECIMAL_LADDER,
+  LANDOLT_TEST_DISTANCE_CM,
+  LANDOLT_TRIALS_PER_TIER,
+  LANDOLT_PASS_MIN_CORRECT,
+};
+
+/** @deprecated Use LANDOLT_START_TIER_INDEX */
+export const LANDOLT_START_INDEX = LANDOLT_START_TIER_INDEX;
+
+/** @deprecated Use LANDOLT_TRIALS_PER_TIER */
+export const LANDOLT_TRIALS_PER_LEVEL = LANDOLT_TRIALS_PER_TIER;
+
+/** @deprecated Use LANDOLT_PASS_MIN_CORRECT / LANDOLT_TRIALS_PER_TIER */
+export const LANDOLT_PASS_RATE = LANDOLT_PASS_MIN_CORRECT / LANDOLT_TRIALS_PER_TIER;
+
+export const LANDOLT_DENOM_LADDER = LANDOLT_DECIMAL_LADDER.map((dec) =>
+  Math.round((6 / dec) * 10) / 10
+);
 
 /**
- * Staircase ladder of Snellen-equivalent denominators, easy → hard.
- * Index 0 = largest ring (6/30, poorest acuity)  …  last = smallest (6/3.8, sharpest).
- * Spacing follows the clinical logMAR convention (0.1 logMAR per step):
- *   logMAR 0.7 → -0.2, i.e. denom = 6 × 10^logMAR.
- *
- * A correct answer moves the staircase one step DOWN this list (smaller ring);
- * a wrong answer moves one step UP (larger ring).
+ * Outer diameter in mm (ISO 8596 @ reference distance, scaled to test distance).
+ * D_mm = (3.636 / decimal) × (distanceCm / 50)
  */
-export const LANDOLT_DENOM_LADDER = [30, 24, 19, 15, 12, 9.5, 7.6, 6, 4.8, 3.8];
+export function landoltOuterDiameterMm(decimal, distanceCm = LANDOLT_TEST_DISTANCE_CM) {
+  const d = Math.max(0.08, typeof decimal === "number" ? decimal : parseFloat(decimal) || 0.5);
+  const distScale = distanceCm / LANDOLT_ISO_REF_DISTANCE_CM;
+  return (LANDOLT_ISO_DIAMETER_MM_AT_DECIMAL_1 * distScale) / d;
+}
 
-/** Recommended starting rung (slightly easy) so the staircase brackets threshold quickly. */
-export const LANDOLT_START_INDEX = 2; // 6/19
+/** Stroke and gap width in mm (each = D/5). */
+export function landoltStrokeGapMm(decimal, distanceCm = LANDOLT_TEST_DISTANCE_CM) {
+  return landoltOuterDiameterMm(decimal, distanceCm) * LANDOLT_STROKE_GAP_RATIO;
+}
+
+/** Outer diameter in CSS pixels from decimal acuity. */
+export function getLandoltSizeFromDecimal(decimal, ppi, distanceCm = LANDOLT_TEST_DISTANCE_CM) {
+  return Math.max(8, Math.round(mmToPx(landoltOuterDiameterMm(decimal, distanceCm), ppi)));
+}
 
 /**
- * Outer diameter (CSS px) of a Landolt C ring for a given Snellen denominator.
- * A Landolt C's overall size equals a Snellen letter's height (both subtend 5 arcmin
- * at the reference distance for 6/6), so we reuse the Snellen physical formula:
- *   diameter = (denom / 6) × 8.726 mm.
- * The gap and stroke each subtend 1 arcmin = 1/5 of the diameter.
- *
- * @param {number} denom - Snellen denominator (e.g. 6 for 6/6, 4.8 for 6/4.8)
- * @param {number} ppi   - Calibrated CSS pixels per inch
- * @returns {number}       CSS pixel diameter (integer)
+ * Outer diameter (CSS px) from Snellen denominator (6/X).
+ * @param {number} denom - e.g. 12 for 6/12 → decimal 0.5
  */
-export function getLandoltSize(denom, ppi) {
-  const d = denom > 0 ? denom : 6;
-  const diameterMm = (d / 6) * SNELLEN_6_6_HEIGHT_MM;
-  return Math.round(mmToPx(diameterMm, ppi));
+export function getLandoltSize(denom, ppi, distanceCm = LANDOLT_TEST_DISTANCE_CM) {
+  const d = denom > 0 ? denom : 12;
+  return getLandoltSizeFromDecimal(6 / d, ppi, distanceCm);
+}
+
+/** Decimal acuity → Snellen label, e.g. 0.5 → "6/12". */
+export function decimalToLandoltSnellen(decimal) {
+  const d = typeof decimal === "number" ? decimal : parseFloat(decimal) || 0.5;
+  return landoltDenomToAcuity(6 / d);
 }
 
 /** Format a (possibly fractional) denominator as a clean Snellen string, e.g. "6/9.5". */

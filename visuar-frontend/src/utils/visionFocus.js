@@ -10,8 +10,8 @@ export const VISION_FOCUS = {
 };
 
 export const VISION_FOCUS_LABELS = {
-  far: "Distance (far) blur reported",
-  near: "Near blur reported",
+  far: "Distance blur tendency reported",
+  near: "Near focus difficulty reported",
   both: "Both near and distance blur reported",
   unsure: "Vision focus not specified",
 };
@@ -39,23 +39,40 @@ export function setVisionFocus(focus) {
   localStorage.setItem(STORAGE_KEY, focus);
 }
 
+/**
+ * After quick screener: weaker distance → far flow; weaker near → near; both weak → both.
+ */
 export function resolveFocusAfterScreener({ snellenPassed, jaegerPassed }) {
-  if (!snellenPassed && jaegerPassed) return VISION_FOCUS.NEAR;
-  if (snellenPassed && !jaegerPassed) return VISION_FOCUS.FAR;
+  const distanceWeak = !snellenPassed;
+  const nearWeak = !jaegerPassed;
+  if (distanceWeak && nearWeak) return VISION_FOCUS.BOTH;
+  if (distanceWeak) return VISION_FOCUS.FAR;
+  if (nearWeak) return VISION_FOCUS.NEAR;
   return VISION_FOCUS.BOTH;
 }
 
-/** Distance-focused screening (myopia pattern) — Snellen first, contrast as supporting data. */
+export function getPostScreenerRecommendation(focus) {
+  const titles = {
+    [VISION_FOCUS.FAR]: "Distance Vision Tests",
+    [VISION_FOCUS.NEAR]: "Near Vision Tests",
+    [VISION_FOCUS.BOTH]: "Complete Vision Assessment",
+  };
+  return titles[focus] || titles[VISION_FOCUS.BOTH];
+}
+
+/** Short screener only — distance row, near line, optional contrast. */
+export function buildQuickScreenerPlan() {
+  return [STEP.SCREENER_SNELLEN, STEP.SCREENER_JAEGER, STEP.CONTRAST];
+}
+
 function farTrack() {
   return [STEP.SNELLEN, STEP.CONTRAST];
 }
 
-/** Near-focused screening (hyperopia pattern) — Jaeger and near-far first, Snellen + contrast supporting. */
 function nearTrack() {
   return [STEP.JAEGER, STEP.NEAR_FAR, STEP.SNELLEN, STEP.CONTRAST];
 }
 
-/** Both near and far blur — full bilateral screening with contrast. */
 function bothTrack() {
   return [STEP.SNELLEN, STEP.JAEGER, STEP.NEAR_FAR, STEP.CONTRAST];
 }

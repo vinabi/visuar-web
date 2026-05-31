@@ -36,7 +36,7 @@ export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
             Where do you notice blur the most?
           </h2>
           <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Used for routing only — not a diagnosis.
+            Your selection helps us choose tests. It is not a diagnosis.
           </p>
         </div>
       </div>
