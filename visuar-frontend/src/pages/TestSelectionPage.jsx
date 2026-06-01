@@ -107,7 +107,7 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
         </div>
         <span
           className={`text-[10px] px-2 py-1 rounded-full font-semibold uppercase tracking-wide ${
-            isDarkMode ? "bg-violet-500/20 text-violet-300" : "bg-violet-100 text-violet-700"
+            isDarkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700"
           }`}
         >
           {test.badge}
