@@ -25,6 +25,16 @@ import {
 } from "../utils/testCatalog";
 import { startNewScreeningSession, setSessionVisionFocus } from "../utils/screeningSession";
 
+function badgeStyles(test, isDarkMode) {
+  const isEyesightNumberRecommended =
+    test.badge === "Recommended" &&
+    (test.id === TEST_IDS.SNELLEN || test.id === TEST_IDS.JAEGER);
+  if (isEyesightNumberRecommended) {
+    return isDarkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700";
+  }
+  return isDarkMode ? "bg-violet-500/20 text-violet-300" : "bg-violet-100 text-violet-700";
+}
+
 function TestCard({ test, isDarkMode, locked, requiredPlan }) {
   if (!test.available && !locked) {
     return (
@@ -106,9 +116,7 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
           <Eye className={`w-6 h-6 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
         </div>
         <span
-          className={`text-[10px] px-2 py-1 rounded-full font-semibold uppercase tracking-wide ${
-            isDarkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700"
-          }`}
+          className={`text-[10px] px-2 py-1 rounded-full font-semibold uppercase tracking-wide ${badgeStyles(test, isDarkMode)}`}
         >
           {test.badge}
         </span>
