@@ -15,6 +15,8 @@ export function useResultsAIAnalysis({
   initialAi,
   userProfile,
   persistSlug,
+  /** When false (e.g. Free plan), skip Gemini fetch on results page. */
+  enabled = true,
 }) {
   const hasCompleteInitial =
     (initialAi?.findings?.length ?? 0) > 0 &&
@@ -47,7 +49,7 @@ export function useResultsAIAnalysis({
   }, [testType]);
 
   useEffect(() => {
-    if (!testType || hasCompleteInitial || fetchedRef.current) return;
+    if (!enabled || !testType || hasCompleteInitial || fetchedRef.current) return;
 
     const payload = buildResultsAIPayload(testType, { ...ctx, userProfile });
     if (!payload) return;
@@ -78,11 +80,11 @@ export function useResultsAIAnalysis({
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when test slug changes
-  }, [testType, hasCompleteInitial, userProfile, persistSlug]);
+  }, [testType, hasCompleteInitial, userProfile, persistSlug, enabled]);
 
   // Pick up background AI written to sessionStorage after test finish
   useEffect(() => {
-    if (!persistSlug || hasCompleteInitial) return;
+    if (!enabled || !persistSlug || hasCompleteInitial) return;
     const key = `visuar_last_result_${persistSlug}`;
     const poll = () => {
       try {
@@ -112,7 +114,7 @@ export function useResultsAIAnalysis({
     poll();
     const id = setInterval(poll, 1500);
     return () => clearInterval(id);
-  }, [persistSlug, hasCompleteInitial]);
+  }, [persistSlug, hasCompleteInitial, enabled]);
 
   return { aiAnalysis, aiLoading, setAiAnalysis };
 }

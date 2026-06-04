@@ -4,6 +4,7 @@ import { getBrowserZoomWarning, getRefractionDisplaySize } from "../utils/vision
 import { formatAcuityLabel } from "../utils/acuityUnits";
 import { diopterToBlurSigma, roundDiopter } from "../utils/refractionMath";
 import { calcConsistencyScore } from "../utils/metricsEngine";
+import { EyeRestReminder } from "./EyeRestReminder";
 import {
   getRefractionRounds,
   getRefractionRoundLetters,
@@ -236,6 +237,7 @@ export function RefractionSimulatorEngine({
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+        <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Refraction Simulator
         </h2>

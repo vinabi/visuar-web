@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import { COLOR_PLATES, TOTAL_PLATES } from "../utils/colorVisionData";
 import { calcColorVisionScore } from "../utils/metricsEngine";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const FEEDBACK_MS = 700;
 
@@ -12,6 +13,7 @@ function Instructions({ isDarkMode, visionOk, onStart }) {
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+      <EyeRestReminder isDarkMode={isDarkMode} className="max-w-md" />
       <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
         <svg viewBox="0 0 32 32" className="w-9 h-9">
           <circle cx="10" cy="16" r="7" fill="#e03030" opacity="0.85" />

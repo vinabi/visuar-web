@@ -14,6 +14,7 @@ import {
   snellenPassThreshold,
 } from "../utils/testStimuli";
 import { useLetterRowInput } from "../hooks/useLetterRowInput";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const FEEDBACK_MS = 350;
 
@@ -71,6 +72,8 @@ export function ContrastEngine({
   const [isPaused, setIsPaused] = useState(false);
   const [roundNum, setRoundNum] = useState(0);
   const [submitted, setSubmitted] = useState(false);
+  const [feedback, setFeedback] = useState(null);
+  const [roundKey, setRoundKey] = useState(0);
 
   const canvasRef = useRef(null);
   const roundsRef = useRef([]);
@@ -149,6 +152,8 @@ export function ContrastEngine({
       setRowLetters(letters);
       setContrastLevelIndex(li);
       setSubmitted(false);
+      setFeedback(null);
+      setRoundKey((k) => k + 1);
       waitingRef.current = true;
       setAcceptingInput(true);
       roundStartRef.current = Date.now();
@@ -158,7 +163,7 @@ export function ContrastEngine({
 
   const processResponse = useCallback(
     (payload) => {
-      if (!waitingRef.current || phaseRef.current !== "TESTING" || isPausedRef.current) return;
+      if (!waitingRef.current || phaseRef.current !== "TESTING") return false;
       waitingRef.current = false;
       setAcceptingInput(false);
 
@@ -222,24 +227,36 @@ export function ContrastEngine({
           startRound(completedRounds);
         }
       }, FEEDBACK_MS);
+      return true;
     },
     [contrastLevels, totalRounds, onTestComplete, passThreshold, startRound]
   );
 
   const finalizeRow = useCallback(
     (payload) => {
-      if (submitted) return;
-      setSubmitted(true);
-      processResponse({ ...payload, correct: payload.correctCount >= passThreshold });
+      if (submitted || !waitingRef.current) return;
+      const accepted = processResponse({
+        ...payload,
+        correct: payload.correctCount >= passThreshold,
+      });
+      if (accepted) setSubmitted(true);
     },
     [submitted, processResponse, passThreshold]
   );
 
+  const expectedRow = rowLetters.join("");
+
   const { displaySlots, filledCount } = useLetterRowInput({
-    expectedLetters: rowLetters,
-    visionOk: visionOk && phase === "TESTING" && !isPaused && acceptingInput && !submitted,
+    expectedLetters: expectedRow,
+    visionOk:
+      visionOk &&
+      phase === "TESTING" &&
+      !isPaused &&
+      acceptingInput &&
+      !submitted,
     submitted,
     onSubmit: finalizeRow,
+    roundKey,
   });
 
   const handleStart = useCallback(() => {
@@ -257,6 +274,7 @@ export function ContrastEngine({
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+        <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Contrast Sensitivity Test
         </h2>
@@ -309,7 +327,7 @@ export function ContrastEngine({
         </div>
 
         <div
-          className={`rounded-2xl overflow-hidden mb-4 ${
+          className={`relative rounded-2xl overflow-hidden mb-4 ${
             isDarkMode ? "ring-2 ring-slate-700" : "ring-2 ring-slate-200"
           }`}
           style={{ width: canvasCSSSize, height: canvasCSSSize }}

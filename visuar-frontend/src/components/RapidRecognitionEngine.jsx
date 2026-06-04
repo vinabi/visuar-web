@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { AlertTriangle, Zap } from "lucide-react";
 import { buildMetricsPayload, calcSessionStability } from "../utils/metricsEngine";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 // Level definitions: sizePx = arrow bounding box, displayMs = how long it stays visible
 const LEVELS = [
@@ -282,6 +283,7 @@ export function RapidRecognitionEngine({ ppi = 96, isDarkMode, visionOk, onTestC
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+        <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
         <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
           <Zap className={`w-8 h-8 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
         </div>

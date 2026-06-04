@@ -450,21 +450,38 @@ export function pickRandomLetters(count, exclude = []) {
   return result;
 }
 
-/** Pick contrast row letters for a level (stable per round index, varied across rounds). */
-export function pickContrastRowLetters(levelIndex, letterCount, recentRows = []) {
-  const seed = REFRACTION_LETTER_ROWS[levelIndex % REFRACTION_LETTER_ROWS.length];
+function contrastLettersFromSeed(seedIndex, letterCount) {
+  const seed = REFRACTION_LETTER_ROWS[seedIndex % REFRACTION_LETTER_ROWS.length];
   let letters = parseRow(seed);
   if (letters.length < letterCount) {
-    letters = [...letters, ...pickOptotypes(letterCount - letters.length, letters)];
+    const extra = parseRow(
+      REFRACTION_LETTER_ROWS[(seedIndex + 1) % REFRACTION_LETTER_ROWS.length]
+    );
+    for (const ch of extra) {
+      if (letters.length >= letterCount) break;
+      if (!letters.includes(ch)) letters.push(ch);
+    }
+    const pool = OPTOTYPES.filter((c) => !letters.includes(c));
+    let i = 0;
+    while (letters.length < letterCount && pool.length > 0) {
+      letters.push(pool[(seedIndex + i) % pool.length]);
+      i += 1;
+    }
   }
   if (letters.length > letterCount) {
     letters = letters.slice(0, letterCount);
   }
-  const key = letters.join("");
-  if (recentRows.includes(key)) {
-    return pickOptotypes(letterCount);
-  }
   return letters;
+}
+
+/** Pick contrast row letters for a level (stable per round index, varied across rounds). */
+export function pickContrastRowLetters(levelIndex, letterCount, recentRows = []) {
+  for (let offset = 0; offset < REFRACTION_LETTER_ROWS.length; offset += 1) {
+    const letters = contrastLettersFromSeed(levelIndex + offset, letterCount);
+    const key = letters.join("");
+    if (!recentRows.includes(key)) return letters;
+  }
+  return contrastLettersFromSeed(levelIndex, letterCount);
 }
 
 /** Score letter-by-letter response vs expected. */

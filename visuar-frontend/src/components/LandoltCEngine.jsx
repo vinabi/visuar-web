@@ -21,6 +21,7 @@ import {
 import { useFocusDistanceHold } from "../hooks/useFocusDistanceHold";
 import { FocusDistanceGate } from "./FocusDistanceGate";
 import { LandoltCSvg } from "./LandoltCSvg";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const MAX_TIER = LANDOLT_ACUITY_TIERS.length - 1;
 const FEEDBACK_MS = 450;
@@ -329,6 +330,7 @@ export function LandoltCEngine({
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+        <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Landolt C Acuity Test
         </h2>

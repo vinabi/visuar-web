@@ -12,6 +12,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { useProAIExplanations } from "../components/ProGatedAIContent";
 
 import { PPICalibrator } from "../components/PPICalibrator";
 import { SnellenEngine } from "../components/SnellenEngine";
@@ -41,6 +42,7 @@ import { RefractionSimulatorEngine } from "../components/RefractionSimulatorEngi
 import { AstigmatismFanEngine } from "../components/AstigmatismFanEngine";
 import { RefractionBatteryProgress } from "../components/RefractionBatteryProgress";
 import { EyeCoverGuide } from "../components/vision/EyeCoverGuide";
+import { EyeRestReminder } from "../components/EyeRestReminder";
 import { API_URL, WS_URL } from "../lib/config";
 import { estimateDiopterFromResult, DIOPTER_ESTIMATE_DISCLAIMER, buildTestEyePrescription } from "../utils/diopterEstimate";
 import { acuityToScore, formatAcuityLabel } from "../utils/acuityUnits";
@@ -107,9 +109,19 @@ const IMPLEMENTED_TESTS = [
 
 // ─── Constants ───────────────────────────────────────────
 const PRECHECK_LOCK_MS = 3000;
-const EYE_VIOLATION_THRESHOLD_MS = 5000; // 5s of both-open → warning
-const EYE_WARNING_COUNTDOWN_S = 5;       // 5s countdown before restart
-const MAX_VIOLATIONS = 3;
+const EYE_VIOLATION_THRESHOLD_MS = 2000; // brief grace, then pause (no test termination)
+/** After manual Resume, do not re-pause immediately while the user fixes cover / camera catches up. */
+const EYE_MANUAL_RESUME_GRACE_MS = 6000;
+
+/** True when webcam reports the eye that should stay covered for this testing eye. */
+function isExpectedEyeCovered(eyeState, testingEye) {
+  if (!eyeState) return false;
+  const expected = testingEye === "left" ? "right_covered" : "left_covered";
+  if (eyeState === expected) return true;
+  // Hand occlusion can read as "closed" on the covered side (after mirror swap in WS handler).
+  const closedAlt = testingEye === "left" ? "right_closed" : "left_closed";
+  return eyeState === closedAlt;
+}
 
 function mapNumericConfidence(pct) {
   if (typeof pct === "string") return pct;
@@ -151,6 +163,7 @@ export default function TestPage() {
   const jaegerLevels = getJaegerLevels(quickMode);
   const navigate = useNavigate();
   const { session } = useAuth();
+  const proAiEnabled = useProAIExplanations();
 
   const isMobileOrTablet = useIsMobileOrTablet();
 
@@ -258,6 +271,7 @@ export default function TestPage() {
   /** Background Gemini analysis — updates persisted results and session-summary nav state. */
   const runPostTestAI = useCallback(
     async (apiTestType, buildPayload, { slug, navStateRef } = {}) => {
+      if (!proAiEnabled) return null;
       let profile = null;
       if (session?.access_token) {
         try {
@@ -279,7 +293,7 @@ export default function TestPage() {
       }
       return aiData;
     },
-    [session?.access_token]
+    [session?.access_token, proAiEnabled]
   );
 
   const showSnellenEngine =
@@ -320,11 +334,12 @@ export default function TestPage() {
   const lockStartRef = useRef(null);
   const [lockProgress, setLockProgress] = useState(0);
 
-  // Eye violation tracking
+  // Eye-cover pause (resume when cover is correct — never terminate the test)
   const [eyeWarningVisible, setEyeWarningVisible] = useState(false);
-  const [eyeWarningCountdown, setEyeWarningCountdown] = useState(EYE_WARNING_COUNTDOWN_S);
-  const [violationCount, setViolationCount] = useState(0);
+  const [eyePauseCount, setEyePauseCount] = useState(0);
   const eyeBadSinceRef = useRef(null);
+  const eyePauseActiveRef = useRef(false);
+  const eyeManualResumeUntilRef = useRef(0);
   // Prevents finishEye from running twice if a stale callback fires during async save
   const finishingRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -537,7 +552,10 @@ export default function TestPage() {
       const distOk =
         isDistanceOkForMode(vr, viewMode) || vr.distance_status === "ok";
       // Binocular tests (colour vision) don't require eye cover
-      const ok = vr.face_detected && distOk && (isColorVisionTest || vr.eye_state === expectedCover);
+      const ok =
+        vr.face_detected &&
+        distOk &&
+        (isColorVisionTest || isExpectedEyeCovered(vr.eye_state, testingEye));
       if (ok) {
         badSinceRef.current = null;
         if (!lockStartRef.current) lockStartRef.current = Date.now();
@@ -567,74 +585,63 @@ export default function TestPage() {
       return;
     }
 
-    const expectedCover = testingEye === "left" ? "right_covered" : "left_covered";
     const tick = setInterval(() => {
       const vr = visionResultRef.current;
       if (!vr || !vr.face_detected) return;
 
-      // Colour vision is binocular — eye cover not required
-      const eyeOk = isColorVisionTest || vr.eye_state === expectedCover;
+      const eyeOk =
+        isColorVisionTest || isExpectedEyeCovered(vr.eye_state, testingEye);
 
       if (eyeOk) {
         eyeBadSinceRef.current = null;
+        eyePauseActiveRef.current = false;
+        eyeManualResumeUntilRef.current = 0;
         setEyeWarningVisible(false);
-        setEyeWarningCountdown(EYE_WARNING_COUNTDOWN_S);
       } else {
+        if (Date.now() < eyeManualResumeUntilRef.current) {
+          eyeBadSinceRef.current = null;
+          return;
+        }
         if (!eyeBadSinceRef.current) {
           eyeBadSinceRef.current = Date.now();
         } else if (Date.now() - eyeBadSinceRef.current > EYE_VIOLATION_THRESHOLD_MS) {
+          if (!eyePauseActiveRef.current) {
+            eyePauseActiveRef.current = true;
+            setEyePauseCount((n) => n + 1);
+            if (showSnellenEngine) snellenPauseCountRef.current += 1;
+          }
           setEyeWarningVisible(true);
         }
       }
     }, 200);
     return () => clearInterval(tick);
-  }, [testPhase, testingEye]);
+  }, [testPhase, testingEye, isColorVisionTest, showSnellenEngine]);
 
-  // ─── Eye warning countdown ──────────────────────────
-  useEffect(() => {
-    if (!eyeWarningVisible) {
-      setEyeWarningCountdown(EYE_WARNING_COUNTDOWN_S);
+  const dismissEyePauseOverlay = useCallback((manualResume = false) => {
+    eyeBadSinceRef.current = null;
+    eyePauseActiveRef.current = false;
+    if (manualResume) {
+      eyeManualResumeUntilRef.current = Date.now() + EYE_MANUAL_RESUME_GRACE_MS;
+    } else {
+      eyeManualResumeUntilRef.current = 0;
+    }
+    setEyeWarningVisible(false);
+  }, []);
+
+  const tryResumeFromEyePause = useCallback(() => {
+    const vr = visionResultRef.current;
+    const eyeOk =
+      isColorVisionTest ||
+      (vr?.face_detected && isExpectedEyeCovered(vr.eye_state, testingEye));
+
+    if (eyeOk) {
+      dismissEyePauseOverlay(false);
       return;
     }
-    const tick = setInterval(() => {
-      setEyeWarningCountdown((prev) => {
-        if (prev <= 1) {
-          // BUG FIX: Don't call navigate() or setViolationCount inside a state
-          // updater — schedule side-effects via a timeout instead.
-          setTimeout(() => {
-            setViolationCount((v) => {
-              const newV = v + 1;
-              if (newV >= MAX_VIOLATIONS) {
-                // Too many violations — fail the test
-                const failPayload = {
-                  leftEye: resultsRef.current.left || { acuity: null, diopter: null },
-                  rightEye: resultsRef.current.right || { acuity: null, diopter: null },
-                  timestamp: new Date().toISOString(),
-                  unreliable: true,
-                };
-                if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-                navigate(`/results/${testId || "snellen-acuity"}`, { state: failPayload });
-              }
-              return newV;
-            });
-            setCurrentLevelIndex(0);
-            // Snellen: hard-reset engine even if level index didn't change
-            setSnellenResetToken((t) => t + 1);
-            levelResultFiredRef.current = false;
-            // Contrast/Orientation: remount engine from scratch (key includes token)
-            setNonSnellenResetToken((t) => t + 1);
-            if (isRefractionFlow) setRefractionEngineKey((k) => k + 1);
-            setEyeWarningVisible(false);
-            setTestPhase("PRE_CHECK");
-            eyeBadSinceRef.current = null;
-          }, 0);
-          return EYE_WARNING_COUNTDOWN_S;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(tick);
-  }, [eyeWarningVisible, navigate, testId]);
+
+    // User override — resume even if the model has not confirmed cover yet
+    dismissEyePauseOverlay(true);
+  }, [testingEye, isColorVisionTest, dismissEyePauseOverlay]);
 
   // ─── Calibrate ─────────────────────────────────────────
   const handleCalibrate = useCallback(async () => {
@@ -2925,26 +2932,43 @@ export default function TestPage() {
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
       {/* ── EYE VIOLATION WARNING OVERLAY ── */}
-      {eyeWarningVisible && (
+      {eyeWarningVisible && !isColorVisionTest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
           <div className={`max-w-lg w-full mx-4 p-8 rounded-3xl text-center shadow-2xl ${
-            isDarkMode ? "bg-red-950/90 border border-red-500/50" : "bg-white border-2 border-red-300"
+            isDarkMode ? "bg-amber-950/90 border border-amber-500/50" : "bg-white border-2 border-amber-300"
           }`}>
             <div className="flex items-center justify-center gap-3 mb-4">
-              <AlertTriangle className="w-10 h-10 text-red-500" />
-              <h2 className={`text-3xl font-black ${isDarkMode ? "text-red-400" : "text-red-600"}`}>
-                Eye Cover Violation
+              <AlertTriangle className="w-10 h-10 text-amber-400" />
+              <h2 className={`text-3xl font-black ${isDarkMode ? "text-amber-300" : "text-amber-700"}`}>
+                Test Paused
               </h2>
             </div>
-            <p className={`text-lg mb-6 ${isDarkMode ? "text-red-300" : "text-red-700"}`}>
-              You are not covering the correct eye. Please cover your <strong>{coveredEyeLabel}</strong> eye to continue.
+            <p className={`text-lg mb-2 ${isDarkMode ? "text-amber-200" : "text-amber-800"}`}>
+              Cover your <strong>{coveredEyeLabel}</strong> eye. We are testing your{" "}
+              <strong>{testingEyeLabel}</strong> eye only.
             </p>
-            <div className="text-6xl font-black text-red-500 animate-pulse mb-4">
-              {eyeWarningCountdown}
-            </div>
-            <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Test will restart in {eyeWarningCountdown}s · Violation {violationCount + 1}/{MAX_VIOLATIONS}
+            <p className={`text-sm mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              Your progress is saved. The test resumes automatically when the camera detects the correct cover,
+              or tap Resume once your {coveredEyeLabel} eye is covered.
             </p>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                tryResumeFromEyePause();
+              }}
+              className="px-10 py-3 rounded-full text-lg font-bold bg-cyan-500 hover:bg-cyan-400 text-white transition-all shadow-lg pointer-events-auto"
+            >
+              Resume test
+            </button>
+            <p className={`text-xs mt-3 ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
+              Resume works even if the camera is still updating — keep the correct eye covered.
+            </p>
+            {eyePauseCount > 0 && (
+              <p className={`text-xs mt-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                Paused {eyePauseCount} time{eyePauseCount !== 1 ? "s" : ""} this session
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -3251,6 +3275,7 @@ export default function TestPage() {
           }`}>
             {isColorVisionTest ? (
               <div className="flex flex-col items-center text-center gap-4">
+                <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
                 <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
                   <svg viewBox="0 0 32 32" className="w-8 h-8"><circle cx="10" cy="16" r="7" fill="#e03030" opacity="0.85" /><circle cx="22" cy="16" r="7" fill="#30aa30" opacity="0.85" /><circle cx="16" cy="16" r="7" fill="#e08030" opacity="0.75" /></svg>
                 </div>
@@ -3281,6 +3306,7 @@ export default function TestPage() {
           <div className={`backdrop-blur-md rounded-3xl shadow-xl p-8 md:p-10 text-center transition-colors ${
             isDarkMode ? "bg-[#1a1f3a]/80 border border-slate-700/50" : "bg-white/80 border border-white/40"
           }`}>
+            <EyeRestReminder isDarkMode={isDarkMode} className="max-w-xl mx-auto" />
             <div className="flex items-center justify-center gap-3 mb-2">
               <EyeOff className={`w-8 h-8 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
               <h2 className={`text-3xl md:text-4xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
@@ -3389,12 +3415,12 @@ export default function TestPage() {
                   onTestComplete={handleNearFarComplete}
                 />
               )}
-              {showContrastInAssessment && (
+              {showContrastInAssessment && testPhase === "TESTING" && (
                 <ContrastEngine
                   key={`${testingEye}-${nonSnellenResetToken}`}
                   ppi={ppi}
                   isDarkMode={isDarkMode}
-                  visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
+                  visionOk={isConditionsMet && !eyeWarningVisible}
                   onTestComplete={handleContrastComplete}
                   lang={i18n.language}
                   quickMode={quickMode}
@@ -3531,9 +3557,9 @@ export default function TestPage() {
                       <TelemetryRow label="Acuity (decimal)" value={formatAcuityLabel(snellenLevels[currentLevelIndex])}
                         color={isDarkMode ? "text-white" : "text-slate-900"} large />
                     </div>
-                    {violationCount > 0 && (
-                      <div className={`p-2 rounded-lg text-xs font-medium ${isDarkMode ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-600"}`}>
-                        ⚠ Eye violations: {violationCount}/{MAX_VIOLATIONS}
+                    {eyePauseCount > 0 && (
+                      <div className={`p-2 rounded-lg text-xs font-medium ${isDarkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-700"}`}>
+                        ⏸ Eye-cover pauses: {eyePauseCount}
                       </div>
                     )}
                   </>

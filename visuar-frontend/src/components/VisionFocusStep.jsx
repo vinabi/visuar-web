@@ -1,5 +1,6 @@
 import { Eye } from "lucide-react";
 import { VISION_FOCUS } from "../utils/visionFocus";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const OPTIONS = [
   {
@@ -27,6 +28,7 @@ const OPTIONS = [
 export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
   return (
     <div className="space-y-6">
+      <EyeRestReminder isDarkMode={isDarkMode} />
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-50"}`}>
           <Eye className="w-6 h-6 text-cyan-500" />

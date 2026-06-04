@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { CreditCard, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 export function PPICalibrator({ onCalibrate, isDarkMode }) {
   const [boxWidth, setBoxWidth] = useState(300);
@@ -14,6 +15,7 @@ export function PPICalibrator({ onCalibrate, isDarkMode }) {
 
   return (
     <div className="flex flex-col items-center max-w-2xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <EyeRestReminder isDarkMode={isDarkMode} />
       <div className="text-center space-y-3">
         <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto ${isDarkMode ? "bg-cyan-500/20 text-cyan-400" : "bg-cyan-100 text-cyan-600"}`}>
           <CreditCard className="w-8 h-8" />

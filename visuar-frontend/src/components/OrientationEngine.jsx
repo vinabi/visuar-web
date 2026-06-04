@@ -6,6 +6,7 @@ import {
 } from "../utils/metricsEngine";
 import { speakInstruction } from "../utils/speech";
 import { TUMBLING_E_SIZES_MM, getBrowserZoomWarning } from "../utils/visionScaling";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 // Fixed pixel size per orientation level (level 0 = easiest/biggest, level 7 = hardest).
 // Proportional to physical mm sizes; does not require PPI calibration.
@@ -279,6 +280,7 @@ export function OrientationEngine({ ppi = 96, isDarkMode, visionOk, onTestComple
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+        <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
         <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-6 ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
           <svg viewBox="0 0 24 24" className={`w-8 h-8 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} fill="none" stroke="currentColor" strokeWidth={2}>
             <circle cx="12" cy="12" r="9" />

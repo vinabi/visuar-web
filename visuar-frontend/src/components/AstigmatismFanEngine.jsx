@@ -6,6 +6,7 @@ import {
 } from "../utils/refractionMath";
 import { ASTIGMATISM_FAN_LINE_COUNT } from "../utils/testStimuli";
 import { VIEWING_DISTANCE } from "../utils/viewingDistance";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const CANVAS_SIZE = 360;
 /** Fixed blur on the perpendicular line (Line B) before normalization. */
@@ -291,6 +292,7 @@ export function AstigmatismFanEngine({
   if (phase === "INSTRUCTIONS") {
     return (
       <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+        <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Astigmatism Fan Test
         </h2>

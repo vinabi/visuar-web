@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { Glasses, Sun, Eye, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { requiresBareEyes, allowsGlassesWithWarning } from "../utils/testCatalog";
 import { CORRECTION_MODE, setCorrectionMode } from "../utils/correctionMode";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const MAX_AUTO_CHECKS = 2;
 
@@ -144,6 +145,7 @@ export function GlassesValidationStep({
 
   return (
     <div className="space-y-6">
+      <EyeRestReminder isDarkMode={isDarkMode} />
       <div className="flex items-center gap-3">
         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-50"}`}>
           <Glasses className="w-6 h-6 text-cyan-500" />

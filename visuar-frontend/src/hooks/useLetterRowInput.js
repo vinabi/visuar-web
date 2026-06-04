@@ -14,6 +14,8 @@ export function useLetterRowInput({
   submitted,
   onSubmit,
   autoSubmitDelayMs = AUTO_SUBMIT_MS,
+  /** Increment when a new chart row starts (clears typed buffer even if letters repeat). */
+  roundKey,
 }) {
   const expected = Array.isArray(expectedLetters)
     ? expectedLetters.join("")
@@ -35,7 +37,7 @@ export function useLetterRowInput({
   useEffect(() => {
     setTyped("");
     clearTimer();
-  }, [expected, clearTimer]);
+  }, [expected, roundKey, clearTimer]);
 
   useEffect(() => () => clearTimer(), [clearTimer]);
 
@@ -47,19 +49,17 @@ export function useLetterRowInput({
 
   const fireSubmit = useCallback(
     (nextTyped) => {
-      if (submitted || !visionOk || nextTyped.length < rowLen) return;
+      // Submit when the row is full even if visionOk flickered after typing
+      // (typing itself still requires visionOk via appendLetter / keydown).
+      if (submitted || nextTyped.length < rowLen) return;
       clearTimer();
       const trimmed = nextTyped.slice(0, rowLen);
       const letters = trimmed.split("");
       const scores = scoreLetterResponse(expected, trimmed);
       onSubmitRef.current({ letters, ...scores });
     },
-    [submitted, visionOk, rowLen, expected, clearTimer]
+    [submitted, rowLen, expected, clearTimer]
   );
-
-  const submitNow = useCallback(() => {
-    fireSubmit(typed);
-  }, [fireSubmit, typed]);
 
   const scheduleAutoSubmit = useCallback(
     (nextTyped) => {
@@ -73,6 +73,17 @@ export function useLetterRowInput({
     },
     [rowLen, autoSubmitDelayMs, clearTimer, fireSubmit]
   );
+
+  // Retry auto-submit when vision returns after the row was filled
+  useEffect(() => {
+    if (submitted || typed.length < rowLen || !visionOk) return;
+    if (submitTimerRef.current) return;
+    scheduleAutoSubmit(typed);
+  }, [visionOk, typed, rowLen, submitted, scheduleAutoSubmit]);
+
+  const submitNow = useCallback(() => {
+    fireSubmit(typed);
+  }, [fireSubmit, typed]);
 
   const appendLetter = useCallback(
     (letter) => {

@@ -4,6 +4,7 @@ import { applyDuochromeAdjustmentWeighted, roundDiopter } from "../utils/refract
 import { getDuochromeRounds, pickOptotypes } from "../utils/testStimuli";
 import { calcDuochromeScore } from "../utils/metricsEngine";
 import { formatAcuityLabel } from "../utils/acuityUnits";
+import { EyeRestReminder } from "./EyeRestReminder";
 
 const FEEDBACK_MS = 300;
 /** Covert validity check — blurred red side; correct answer is green. */
@@ -32,6 +33,7 @@ function InstructionsScreen({ isDarkMode, visionOk, roundCount, onStart }) {
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center">
+      <EyeRestReminder isDarkMode={isDarkMode} className="max-w-md" />
       <div className="flex items-center gap-3 mb-5">
         <span className="w-9 h-9 rounded-full inline-block" style={{ background: DUO_RED.base }} />
         <span className={`text-2xl font-black ${head}`}>vs</span>

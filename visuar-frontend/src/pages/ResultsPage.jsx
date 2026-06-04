@@ -26,6 +26,11 @@ import { VISION_FOCUS_LABELS } from "../utils/visionFocus";
 import { API_URL } from "../lib/config";
 import { ScreeningResultCards } from "../components/ScreeningResultCards";
 import { TestResultsAIInsight } from "../components/TestResultsAIInsight";
+import {
+  ProGatedAIContent,
+  AIExplanationPlaceholder,
+  useProAIExplanations,
+} from "../components/ProGatedAIContent";
 import { useResultsAIAnalysis } from "../hooks/useResultsAIAnalysis";
 import { onboardingAPI } from "../lib/api";
 import { emptyAiAnalysis } from "../lib/aiAnalysis";
@@ -463,6 +468,7 @@ export default function ResultsPage() {
     emptyAiAnalysis();
 
   const effectiveSnellenState = resultState || persistedState || dbSnellenState;
+  const proAiEnabled = useProAIExplanations();
 
   const { aiAnalysis, aiLoading: aiFetchLoading } = useResultsAIAnalysis({
     testType: effectiveTestType,
@@ -481,6 +487,7 @@ export default function ResultsPage() {
     initialAi,
     userProfile,
     persistSlug: testId && !isNumericId ? testId : null,
+    enabled: proAiEnabled,
   });
 
   const aiLoading = fetchLoading || aiFetchLoading;
@@ -561,99 +568,256 @@ export default function ResultsPage() {
 
   function FindingsSection({ findings, recommendations }) {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
-    const displayFindings = aiAnalysis?.findings?.length > 0 ? aiAnalysis.findings : findings;
-    const displayRecs = aiAnalysis?.recommendations?.length > 0 ? aiAnalysis.recommendations : recommendations;
-    const aiSummary = aiAnalysis?.summary || aiAnalysis?.screening?.summary_en;
-    // Only skeleton when AI is still fetching AND there is nothing to show yet
-    const showFindingsSkeleton = aiFetchLoading && displayFindings.length === 0;
-    const showRecsSkeleton = aiFetchLoading && displayRecs.length === 0;
+    const useAiFindings = proAiEnabled && aiAnalysis?.findings?.length > 0;
+    const useAiRecs = proAiEnabled && aiAnalysis?.recommendations?.length > 0;
+    const displayFindings = useAiFindings ? aiAnalysis.findings : findings;
+    const displayRecs = useAiRecs ? aiAnalysis.recommendations : recommendations;
+    const aiSummary = proAiEnabled
+      ? aiAnalysis?.summary || aiAnalysis?.screening?.summary_en
+      : null;
+    const showFindingsSkeleton = proAiEnabled && aiFetchLoading && displayFindings.length === 0;
+    const showRecsSkeleton = proAiEnabled && aiFetchLoading && displayRecs.length === 0;
+
+    const aiSummaryBlock = aiSummary ? (
+      <div
+        className={`rounded-2xl p-4 mb-4 flex gap-3 items-start ${
+          isDarkMode ? "bg-purple-500/10 border border-purple-500/25" : "bg-purple-50 border border-purple-200"
+        }`}
+      >
+        <Sparkles className={`w-5 h-5 shrink-0 mt-0.5 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`} />
+        <div className="flex-1">
+          <p className={`text-sm leading-relaxed ${isDarkMode ? "text-purple-200" : "text-purple-800"}`}>
+            <span className="font-semibold">AI Summary: </span>
+            {aiSummary}
+          </p>
+          {aiAnalysis?.summary_ur && (
+            <p
+              dir="rtl"
+              className={`text-sm leading-relaxed mt-2 text-right ${
+                isDarkMode ? "text-purple-300" : "text-purple-700"
+              }`}
+            >
+              {aiAnalysis.summary_ur}
+            </p>
+          )}
+        </div>
+      </div>
+    ) : null;
+
+    const aiInsightBlock = proAiEnabled ? (
+      <TestResultsAIInsight
+        ai={aiAnalysis}
+        isDarkMode={isDarkMode}
+        loading={aiFetchLoading && !(aiAnalysis?.summary || aiAnalysis?.findings?.length)}
+      />
+    ) : (
+      <div
+        className={`rounded-2xl mt-6 ${
+          isDarkMode
+            ? "bg-gradient-to-br from-purple-500/8 to-cyan-500/8 border border-purple-500/20"
+            : "bg-gradient-to-br from-purple-50 to-cyan-50 border border-purple-100"
+        }`}
+      >
+        <AIExplanationPlaceholder isDarkMode={isDarkMode} />
+      </div>
+    );
 
     return (
       <>
-        {/* AI Summary banner */}
-        {aiSummary && (
-          <div className={`rounded-2xl p-4 mb-4 flex gap-3 items-start ${isDarkMode ? "bg-purple-500/10 border border-purple-500/25" : "bg-purple-50 border border-purple-200"}`}>
-            <Sparkles className={`w-5 h-5 shrink-0 mt-0.5 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`} />
-            <div className="flex-1">
-              <p className={`text-sm leading-relaxed ${isDarkMode ? "text-purple-200" : "text-purple-800"}`}>
-                <span className="font-semibold">AI Summary: </span>{aiSummary}
-              </p>
-              {aiAnalysis?.summary_ur && (
-                <p dir="rtl" className={`text-sm leading-relaxed mt-2 text-right ${isDarkMode ? "text-purple-300" : "text-purple-700"}`}>
-                  {aiAnalysis.summary_ur}
+        <ProGatedAIContent isDarkMode={isDarkMode} className="mb-4">
+          {proAiEnabled ? (
+            <>
+              {aiSummaryBlock}
+              <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
+                <h3
+                  className={`text-lg font-bold mb-4 flex items-center gap-2 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
+                  Key Findings
+                  {showFindingsSkeleton && (
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" />
+                  )}
+                  {!showFindingsSkeleton && useAiFindings && (
+                    <span
+                      className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
+                        isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
+                      }`}
+                    >
+                      AI
+                    </span>
+                  )}
+                </h3>
+                {showFindingsSkeleton ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-16 rounded-xl animate-pulse ${
+                          isDarkMode ? "bg-slate-700/50" : "bg-slate-100"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                ) : displayFindings.length > 0 ? (
+                  <div className="space-y-3">
+                    {displayFindings.map((f, i) => (
+                      <FindingCard key={i} f={f} isDarkMode={isDarkMode} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    No additional findings for this test.
+                  </p>
+                )}
+              </div>
+
+              <div
+                className={`rounded-2xl p-6 mb-6 ${
+                  isDarkMode
+                    ? "bg-gradient-to-br from-blue-500/8 to-cyan-500/8 border border-blue-500/20"
+                    : "bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100"
+                }`}
+              >
+                <h3
+                  className={`text-lg font-bold mb-4 flex items-center gap-2 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}
+                >
+                  <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
+                  Recommendations
+                  {!showRecsSkeleton && useAiRecs && (
+                    <span
+                      className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
+                        isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
+                      }`}
+                    >
+                      AI
+                    </span>
+                  )}
+                </h3>
+                {showRecsSkeleton ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className={`h-10 rounded-xl animate-pulse ${
+                          isDarkMode ? "bg-slate-700/50" : "bg-slate-100"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                ) : displayRecs.length > 0 ? (
+                  <div className="space-y-3">
+                    {displayRecs.map((rec, i) => (
+                      <div key={i} className="flex gap-3">
+                        <div
+                          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                            isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"
+                          }`}
+                        >
+                          <div
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isDarkMode ? "bg-cyan-400" : "bg-cyan-500"
+                            }`}
+                          />
+                        </div>
+                        <p
+                          className={`text-sm leading-relaxed ${
+                            isDarkMode ? "text-slate-300" : "text-slate-700"
+                          }`}
+                        >
+                          {rec}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    Recommendations will appear when AI analysis completes.
+                  </p>
+                )}
+              </div>
+              {aiInsightBlock}
+            </>
+          ) : (
+            aiInsightBlock
+          )}
+        </ProGatedAIContent>
+
+        {proAiEnabled ? null : (
+          <>
+            <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
+              <h3
+                className={`text-lg font-bold mb-4 flex items-center gap-2 ${
+                  isDarkMode ? "text-white" : "text-slate-900"
+                }`}
+              >
+                <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
+                Key Findings
+              </h3>
+              {displayFindings.length > 0 ? (
+                <div className="space-y-3">
+                  {displayFindings.map((f, i) => (
+                    <FindingCard key={i} f={f} isDarkMode={isDarkMode} />
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  No additional findings for this test.
                 </p>
               )}
             </div>
-          </div>
-        )}
 
-        <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
-          <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-            <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
-            Key Findings
-            {showFindingsSkeleton && <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" />}
-            {!showFindingsSkeleton && aiAnalysis?.findings?.length > 0 && (
-              <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
-                AI
-              </span>
-            )}
-          </h3>
-          {showFindingsSkeleton ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className={`h-16 rounded-xl animate-pulse ${isDarkMode ? "bg-slate-700/50" : "bg-slate-100"}`} />
-              ))}
-            </div>
-          ) : displayFindings.length > 0 ? (
-            <div className="space-y-3">
-              {displayFindings.map((f, i) => <FindingCard key={i} f={f} isDarkMode={isDarkMode} />)}
-            </div>
-          ) : (
-            <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              No additional findings for this test.
-            </p>
-          )}
-        </div>
-
-        <div className={`rounded-2xl p-6 mb-6 ${isDarkMode ? "bg-gradient-to-br from-blue-500/8 to-cyan-500/8 border border-blue-500/20" : "bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100"}`}>
-          <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-            <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
-            Recommendations
-            {!showRecsSkeleton && aiAnalysis?.recommendations?.length > 0 && (
-              <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
-                AI
-              </span>
-            )}
-          </h3>
-          {showRecsSkeleton ? (
-            <div className="space-y-3">
-              {[1, 2].map((i) => (
-                <div key={i} className={`h-10 rounded-xl animate-pulse ${isDarkMode ? "bg-slate-700/50" : "bg-slate-100"}`} />
-              ))}
-            </div>
-          ) : displayRecs.length > 0 ? (
-            <div className="space-y-3">
-              {displayRecs.map((rec, i) => (
-                <div key={i} className="flex gap-3">
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${isDarkMode ? "bg-cyan-400" : "bg-cyan-500"}`} />
-                  </div>
-                  <p className={`text-sm leading-relaxed ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>{rec}</p>
+            <div
+              className={`rounded-2xl p-6 mb-6 ${
+                isDarkMode
+                  ? "bg-gradient-to-br from-blue-500/8 to-cyan-500/8 border border-blue-500/20"
+                  : "bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100"
+              }`}
+            >
+              <h3
+                className={`text-lg font-bold mb-4 flex items-center gap-2 ${
+                  isDarkMode ? "text-white" : "text-slate-900"
+                }`}
+              >
+                <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
+                Recommendations
+              </h3>
+              {displayRecs.length > 0 ? (
+                <div className="space-y-3">
+                  {displayRecs.map((rec, i) => (
+                    <div key={i} className="flex gap-3">
+                      <div
+                        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                          isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"
+                        }`}
+                      >
+                        <div
+                          className={`w-1.5 h-1.5 rounded-full ${
+                            isDarkMode ? "bg-cyan-400" : "bg-cyan-500"
+                          }`}
+                        />
+                      </div>
+                      <p
+                        className={`text-sm leading-relaxed ${
+                          isDarkMode ? "text-slate-300" : "text-slate-700"
+                        }`}
+                      >
+                        {rec}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  No recommendations for this test.
+                </p>
+              )}
             </div>
-          ) : (
-            <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Recommendations will appear when AI analysis completes.
-            </p>
-          )}
-        </div>
-
-        <TestResultsAIInsight
-          ai={aiAnalysis}
-          isDarkMode={isDarkMode}
-          loading={aiFetchLoading && !(aiAnalysis?.summary || aiAnalysis?.findings?.length)}
-        />
+          </>
+        )}
       </>
     );
   }

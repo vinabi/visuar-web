@@ -17,6 +17,7 @@
 import { memo } from "react";
 import { Eye, Hand, Monitor, Ruler, AlignCenter } from "lucide-react";
 import { VIEWING_DISTANCE } from "../../utils/viewingDistance";
+import { EyeRestReminder } from "../EyeRestReminder";
 
 // ─── Keyframes ────────────────────────────────────────────────────────────────
 // "ecg-" prefix to avoid collisions.
@@ -317,6 +318,7 @@ export const EyeCoverGuide = memo(function EyeCoverGuide({ eye = "left", onStart
   return (
     <div className="w-full flex flex-col items-center">
       <style>{KEYFRAMES}</style>
+      <EyeRestReminder isDarkMode={isDarkMode} />
 
       {/* ── Header ── */}
       <div className="text-center mb-6">
