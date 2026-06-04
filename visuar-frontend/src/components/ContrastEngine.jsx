@@ -6,6 +6,8 @@ import {
   calcWeightedContrastScore,
 } from "../utils/metricsEngine";
 import { speakInstruction } from "../utils/speech";
+import { DISTANCE_ACUITY_THRESHOLD_HINT } from "../utils/distanceAcuityInstructions";
+import { DistanceAcuityWarningCard } from "./DistanceAcuityWarningCard";
 import { getBrowserZoomWarning } from "../utils/visionScaling";
 import {
   getContrastLevels,
@@ -67,6 +69,7 @@ export function ContrastEngine({
   const totalRounds = contrastLevels.length;
 
   const [phase, setPhase] = useState("INSTRUCTIONS");
+  const [distanceAck, setDistanceAck] = useState(false);
   const [rowLetters, setRowLetters] = useState(["E"]);
   const [contrastLevelIndex, setContrastLevelIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -278,6 +281,15 @@ export function ContrastEngine({
         <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
           Contrast Sensitivity Test
         </h2>
+
+        <DistanceAcuityWarningCard
+          isDarkMode={isDarkMode}
+          requireAcknowledgement
+          acknowledged={distanceAck}
+          onAcknowledgedChange={setDistanceAck}
+          className="mb-5 max-w-lg text-left"
+        />
+
         <p className={`text-lg mb-2 max-w-lg ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
           Identify faint letters — contrast drops and letters get smaller with more characters each
           round ({totalRounds} rounds).
@@ -287,17 +299,22 @@ export function ContrastEngine({
           visual quality screening only — it does not estimate diopters.
         </p>
         <button
+          type="button"
           onClick={handleStart}
-          disabled={!visionOk}
+          disabled={!visionOk || !distanceAck}
           className={`px-10 py-4 rounded-full text-lg font-bold transition-all shadow-lg ${
-            visionOk
+            visionOk && distanceAck
               ? isDarkMode
                 ? "bg-cyan-500 hover:bg-cyan-400 text-white"
                 : "bg-cyan-500 hover:bg-cyan-600 text-white"
               : "bg-slate-500/40 text-slate-400 cursor-not-allowed"
           }`}
         >
-          {visionOk ? "Start Test" : "Waiting for camera…"}
+          {!visionOk
+            ? "Waiting for camera…"
+            : !distanceAck
+              ? "Confirm the box above to start"
+              : "Start Test"}
         </button>
       </div>
     );
@@ -355,6 +372,13 @@ export function ContrastEngine({
           ))}
         </div>
 
+        <p
+          className={`text-xs mb-2 text-center max-w-md font-medium ${
+            isDarkMode ? "text-amber-400/90" : "text-amber-800"
+          }`}
+        >
+          {DISTANCE_ACUITY_THRESHOLD_HINT}
+        </p>
         <p className={`text-sm mb-2 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
           Type what you see ({filledCount}/{rowLetters.length}). Auto-submits when the row is full.
         </p>

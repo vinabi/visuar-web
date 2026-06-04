@@ -18,6 +18,7 @@ import { FocusDistanceGate } from "./FocusDistanceGate";
 import { pickOptotypes, snellenPassThreshold } from "../utils/testStimuli";
 import { OptotypeLetters } from "./OptotypeLetters";
 import { useLetterRowInput } from "../hooks/useLetterRowInput";
+import { DISTANCE_ACUITY_THRESHOLD_HINT } from "../utils/distanceAcuityInstructions";
 
 const ROUNDS = [
   {
@@ -267,6 +268,16 @@ export function NearFarSwitchingEngine({
             </div>
           ))}
         </div>
+
+        {round.type === "snellen" && round.mode === FOCUS_MODES.FAR && (
+          <p
+            className={`text-xs mb-3 text-center max-w-md font-medium ${
+              isDarkMode ? "text-amber-400/90" : "text-amber-800"
+            }`}
+          >
+            {DISTANCE_ACUITY_THRESHOLD_HINT}
+          </p>
+        )}
 
         <div className="flex gap-3 justify-center">
           <button

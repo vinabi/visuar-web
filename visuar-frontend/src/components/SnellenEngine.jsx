@@ -11,6 +11,7 @@ import {
   snellenPassThreshold,
 } from "../utils/testStimuli";
 import { useLetterRowInput } from "../hooks/useLetterRowInput";
+import { DISTANCE_ACUITY_THRESHOLD_HINT } from "../utils/distanceAcuityInstructions";
 
 const FEEDBACK_MS = 1400;
 
@@ -268,6 +269,13 @@ export function SnellenEngine({
         </div>
       )}
 
+      <p
+        className={`text-xs mb-2 text-center max-w-md font-medium ${
+          isDarkMode ? "text-amber-400/90" : "text-amber-800"
+        }`}
+      >
+        {DISTANCE_ACUITY_THRESHOLD_HINT}
+      </p>
       <p className={`text-xs mb-3 text-center max-w-md ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
         Type any letters A–Z on your keyboard ({filledCount}/{lettersPerRow}). Wrong letters are
         recorded. Need {passThreshold}/{lettersPerRow} correct to pass. Backspace to fix before the

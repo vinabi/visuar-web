@@ -14,9 +14,10 @@
  *  isDarkMode boolean
  */
 
-import { memo } from "react";
+import { memo, useState, useEffect } from "react";
 import { Eye, Hand, Monitor, Ruler, AlignCenter } from "lucide-react";
 import { VIEWING_DISTANCE } from "../../utils/viewingDistance";
+import { DistanceAcuityWarningCard } from "../DistanceAcuityWarningCard";
 import { EyeRestReminder } from "../EyeRestReminder";
 
 // ─── Keyframes ────────────────────────────────────────────────────────────────
@@ -310,10 +311,22 @@ const STEPS = [
 ];
 
 // ─── Main export ───────────────────────────────────────────────────────────────
-export const EyeCoverGuide = memo(function EyeCoverGuide({ eye = "left", onStart, isDarkMode }) {
+export const EyeCoverGuide = memo(function EyeCoverGuide({
+  eye = "left",
+  onStart,
+  isDarkMode,
+  showDistanceAcuityGuide = false,
+}) {
   const coverSide  = eye === "left" ? "right" : "left";
   const coverLabel = coverSide.toUpperCase();
   const testLabel  = eye.toUpperCase();
+
+  const [distanceAck, setDistanceAck] = useState(false);
+  useEffect(() => {
+    setDistanceAck(false);
+  }, [eye, showDistanceAcuityGuide]);
+
+  const canStart = !showDistanceAcuityGuide || distanceAck;
 
   return (
     <div className="w-full flex flex-col items-center">
@@ -337,6 +350,16 @@ export const EyeCoverGuide = memo(function EyeCoverGuide({ eye = "left", onStart
           Watch the animation — then do the same before pressing Start
         </p>
       </div>
+
+      {showDistanceAcuityGuide && (
+        <DistanceAcuityWarningCard
+          isDarkMode={isDarkMode}
+          requireAcknowledgement
+          acknowledged={distanceAck}
+          onAcknowledgedChange={setDistanceAck}
+          className="mb-6 max-w-2xl"
+        />
+      )}
 
       {/* ── Body: face animation + steps ── */}
       <div className="flex flex-col md:flex-row items-center md:items-start gap-8 w-full max-w-2xl">
@@ -407,19 +430,27 @@ export const EyeCoverGuide = memo(function EyeCoverGuide({ eye = "left", onStart
 
       {/* ── Start button ── */}
       <button
+        type="button"
         onClick={onStart}
-        className={`mt-8 px-14 py-4 rounded-full text-base font-bold transition-all duration-150 active:scale-95 select-none ${
-          isDarkMode
-            ? "bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/30"
-            : "bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg shadow-cyan-500/35"
+        disabled={!canStart}
+        className={`mt-8 px-14 py-4 rounded-full text-base font-bold transition-all duration-150 select-none ${
+          canStart
+            ? isDarkMode
+              ? "bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg shadow-cyan-500/30 active:scale-95"
+              : "bg-cyan-500 hover:bg-cyan-600 text-white shadow-lg shadow-cyan-500/35 active:scale-95"
+            : isDarkMode
+              ? "bg-slate-700 text-slate-500 cursor-not-allowed shadow-none"
+              : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
         }`}
-        style={{ animation: "ecg-glow 2.6s ease-in-out infinite" }}
+        style={canStart ? { animation: "ecg-glow 2.6s ease-in-out infinite" } : undefined}
       >
         I'm Ready — Start {testLabel} Eye Test
       </button>
 
       <p className={`mt-3 text-xs ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-        The camera will verify your position before the test begins
+        {showDistanceAcuityGuide && !canStart
+          ? "Check the box above to continue"
+          : "The camera will verify your position before the test begins"}
       </p>
     </div>
   );

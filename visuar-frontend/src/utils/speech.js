@@ -60,9 +60,9 @@ const MSGS = {
       "The distance isn't correct yet. Adjust your position so you're about 70 centimeters from the screen.",
     ],
     test_start_snellen: [
-      "The test is starting now. Read each letter that appears and say it out loud clearly.",
-      "Look at each letter carefully and speak it as clearly as you can. Take your time with each one.",
-      "We are beginning the vision test. Say each letter you see on screen clearly when you are ready.",
+      "The distance eyesight test is starting. Type each row on the keyboard. When you reach the line where you must squint to read, enter that entire row incorrectly on purpose—do not guess.",
+      "We are beginning the distance chart test. Type the letters you can read clearly. At the squint line, deliberately enter the full row wrong to mark your clarity limit.",
+      "The test is starting now. Read each highlighted row and type your answer. If you must squint to see a line, type that row entirely wrong instead of guessing.",
     ],
     eye_violation_right: [
       "Your right eye appears to be uncovered. Please cover it immediately to continue the test accurately.",

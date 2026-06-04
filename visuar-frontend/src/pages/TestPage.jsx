@@ -216,6 +216,13 @@ export default function TestPage() {
   const isScreenerStep =
     activeAssessmentStep === STEP.SCREENER_SNELLEN ||
     activeAssessmentStep === STEP.SCREENER_JAEGER;
+  const showDistanceAcuityGuide =
+    isSnellenTest ||
+    isContrastTest ||
+    isNearFarTest ||
+    isRefractionBattery ||
+    (isAssessmentFlow &&
+      assessmentPlan.some((s) => s === STEP.SNELLEN || s === STEP.SCREENER_SNELLEN));
   const [ppi, setPpi] = useState(() => {
     const saved = localStorage.getItem("visuar_ppi");
     return saved ? parseFloat(saved) : 148;
@@ -3143,6 +3150,7 @@ export default function TestPage() {
             <EyeCoverGuide
               eye={testingEye}
               isDarkMode={isDarkMode}
+              showDistanceAcuityGuide={showDistanceAcuityGuide}
               onStart={() => setTestPhase("PRE_CHECK")}
             />
           </div>

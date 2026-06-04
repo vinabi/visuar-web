@@ -70,7 +70,8 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.SNELLEN,
     title: "Distance Eyesight Number Test",
-    description: "Checks how clearly you see letters and estimates your eyesight number.",
+    description:
+      "Checks how clearly you see letters and estimates your eyesight number. At the squint line, enter that row entirely incorrectly (no guessing) for an accurate result.",
     duration: "4 min",
     badge: "Recommended",
     available: true,
@@ -160,7 +161,8 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.CONTRAST,
     title: "Contrast Sensitivity",
-    description: "Visual quality screening — does not estimate diopters directly.",
+    description:
+      "Distance faint-letter screening — at the squint line, enter that row entirely incorrectly (no guessing). Does not estimate diopters directly.",
     duration: "3 min",
     badge: "Supporting test",
     available: true,
