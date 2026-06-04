@@ -156,13 +156,41 @@ export const userAPI = {
   },
 };
 
-// Notify API endpoints
+// Notify API endpoints — wait for Supabase session so the JWT is attached
+async function waitForAuthSession(maxMs = 8000) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) return session;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return null;
+}
+
 export const notifyAPI = {
+  signupNotify: async () => {
+    try {
+      if (!(await waitForAuthSession())) {
+        console.warn("[notify] signup: no session yet — welcome email skipped");
+        return;
+      }
+      await apiClient.post("/api/notify/signup");
+    } catch (err) {
+      console.warn("[notify] signup email trigger failed:", err?.message || err);
+    }
+  },
+
   loginNotify: async () => {
     try {
+      if (!(await waitForAuthSession())) {
+        console.warn("[notify] login: no session yet — login email skipped");
+        return;
+      }
       await apiClient.post("/api/notify/login");
-    } catch {
-      // Never block the login flow if this fails
+    } catch (err) {
+      console.warn("[notify] login email trigger failed:", err?.message || err);
     }
   },
 };

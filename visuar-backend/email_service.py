@@ -1,6 +1,6 @@
 """
 VISUAR Email Service
-Sends beautiful HTML emails via Gmail SMTP using aiosmtplib.
+Sends HTML emails via Gmail SMTP (aiosmtplib) with retries and TLS modes for cloud hosts.
 """
 from __future__ import annotations
 
@@ -14,11 +14,40 @@ import aiosmtplib
 
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
-EMAIL_USER = os.getenv("EMAIL_USER", "")
-EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD", "")
-SMTP_HOST = os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("EMAIL_SMTP_PORT", "587"))
-APP_URL = os.getenv("EMAIL_APP_URL", "http://localhost:5173")
+SMTP_TIMEOUT = 30
+MAX_SEND_ATTEMPTS = 2
+
+
+def _email_config() -> dict:
+    """Read env at send time so HF/Vercel secrets are always picked up."""
+    port = int(os.getenv("EMAIL_SMTP_PORT", "587"))
+    return {
+        "user": os.getenv("EMAIL_USER", "").strip(),
+        "password": os.getenv("EMAIL_APP_PASSWORD", "").strip(),
+        "host": os.getenv("EMAIL_SMTP_HOST", "smtp.gmail.com").strip(),
+        "port": port,
+        "app_url": os.getenv("EMAIL_APP_URL", "http://localhost:5173").strip().rstrip("/"),
+        "from_name": os.getenv("EMAIL_FROM_NAME", "VISUAR").strip(),
+        # Port 465 = implicit TLS; 587 = STARTTLS (Gmail supports both)
+        "use_tls": port == 465,
+        "start_tls": port == 587,
+    }
+
+
+def is_email_configured() -> bool:
+    cfg = _email_config()
+    return bool(cfg["user"] and cfg["password"])
+
+
+def log_email_config_status() -> None:
+    cfg = _email_config()
+    if is_email_configured():
+        print(
+            f"[EMAIL] Ready — smtp={cfg['host']}:{cfg['port']} "
+            f"from={cfg['user']} app_url={cfg['app_url']}"
+        )
+    else:
+        print("[EMAIL] Not configured — set EMAIL_USER and EMAIL_APP_PASSWORD.")
 
 # ── Shared styles ─────────────────────────────────────────────────────────────
 
@@ -101,7 +130,7 @@ def _stat_box(label, value, color="#0891b2"):
 
 # ── Email 1: Welcome (Sign Up) ────────────────────────────────────────────────
 
-def _welcome_html(name: str, email: str) -> str:
+def _welcome_html(name: str, email: str, app_url: str) -> str:
     content = f"""
     <!-- Hero -->
     <div style="text-align:center;margin-bottom:32px;">
@@ -157,14 +186,14 @@ def _welcome_html(name: str, email: str) -> str:
       </table>
     </div>
 
-    {_btn("Start Your First Vision Test", f"{APP_URL}/test-selection")}
+    {_btn("Start Your First Vision Test", f"{app_url}/test-selection")}
     """
     return _BASE.format(subject="Welcome to VISUAR 👁️", content=content)
 
 
 # ── Email 2: Login Notification ───────────────────────────────────────────────
 
-def _login_html(name: str, email: str, login_time: str) -> str:
+def _login_html(name: str, email: str, login_time: str, app_url: str) -> str:
     content = f"""
     <!-- Hero -->
     <div style="text-align:center;margin-bottom:32px;">
@@ -202,7 +231,7 @@ def _login_html(name: str, email: str, login_time: str) -> str:
       </p>
     </div>
 
-    {_btn("Go to Dashboard", f"{APP_URL}/dashboard", "#0891b2")}
+    {_btn("Go to Dashboard", f"{app_url}/dashboard", "#0891b2")}
     """
     return _BASE.format(subject="New sign-in to your VISUAR account", content=content)
 
@@ -241,6 +270,7 @@ def _test_result_html(
     right_acuity: str | None,
     ai_summary: str | None,
     result_id: int,
+    app_url: str,
 ) -> str:
     label = _TEST_LABELS.get(test_type, test_type.replace("-", " ").title())
     color = _score_color(score)
@@ -303,33 +333,51 @@ def _test_result_html(
     {ai_section}
 
     {_divider()}
-    {_btn("View Full Results & AI Analysis", f"{APP_URL}/results/{result_id}")}
+    {_btn("View Full Results & AI Analysis", f"{app_url}/results/{result_id}")}
     """
     return _BASE.format(subject=f"✅ Your {label} results — VISUAR", content=content)
 
 
 # ── Sender ────────────────────────────────────────────────────────────────────
 
-async def _send(to_email: str, subject: str, html: str) -> None:
-    if not EMAIL_USER or not EMAIL_APP_PASSWORD:
-        print("[EMAIL] Credentials not configured — skipping.")
-        return
-
+async def _send_smtp_once(to_email: str, subject: str, html: str, cfg: dict) -> None:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = f"VISUAR 👁️ <{EMAIL_USER}>"
+    msg["From"] = f"{cfg['from_name']} 👁️ <{cfg['user']}>"
     msg["To"] = to_email
     msg.attach(MIMEText(html, "html"))
 
     await aiosmtplib.send(
         msg,
-        hostname=SMTP_HOST,
-        port=SMTP_PORT,
-        username=EMAIL_USER,
-        password=EMAIL_APP_PASSWORD,
-        start_tls=True,
+        hostname=cfg["host"],
+        port=cfg["port"],
+        username=cfg["user"],
+        password=cfg["password"],
+        use_tls=cfg["use_tls"],
+        start_tls=cfg["start_tls"],
+        timeout=SMTP_TIMEOUT,
     )
-    print(f"[EMAIL] Sent '{subject}' → {to_email}")
+
+
+async def _send(to_email: str, subject: str, html: str) -> None:
+    cfg = _email_config()
+    if not is_email_configured():
+        print("[EMAIL] Credentials not configured — skipping.")
+        return
+
+    last_error: Exception | None = None
+    for attempt in range(1, MAX_SEND_ATTEMPTS + 1):
+        try:
+            await _send_smtp_once(to_email, subject, html, cfg)
+            print(f"[EMAIL] Sent '{subject}' → {to_email}")
+            return
+        except Exception as e:
+            last_error = e
+            print(f"[EMAIL] Attempt {attempt}/{MAX_SEND_ATTEMPTS} failed for {to_email}: {e}")
+            if attempt < MAX_SEND_ATTEMPTS:
+                await asyncio.sleep(2)
+
+    raise last_error or RuntimeError("Email send failed")
 
 
 async def _send_safe(to_email: str, subject: str, html: str) -> None:
@@ -343,12 +391,14 @@ async def _send_safe(to_email: str, subject: str, html: str) -> None:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def send_welcome_email(to_email: str, name: str) -> None:
-    html = _welcome_html(name, to_email)
+    cfg = _email_config()
+    html = _welcome_html(name, to_email, cfg["app_url"])
     await _send_safe(to_email, "Welcome to VISUAR 👁️ — Your vision journey starts now", html)
 
 
 async def send_login_email(to_email: str, name: str, login_time: str) -> None:
-    html = _login_html(name, to_email, login_time)
+    cfg = _email_config()
+    html = _login_html(name, to_email, login_time, cfg["app_url"])
     await _send_safe(to_email, "New sign-in to your VISUAR account 🔐", html)
 
 
@@ -362,6 +412,9 @@ async def send_test_result_email(
     ai_summary: str | None,
     result_id: int,
 ) -> None:
-    html = _test_result_html(name, test_type, score, left_acuity, right_acuity, ai_summary, result_id)
+    cfg = _email_config()
+    html = _test_result_html(
+        name, test_type, score, left_acuity, right_acuity, ai_summary, result_id, cfg["app_url"]
+    )
     label = _TEST_LABELS.get(test_type, test_type.replace("-", " ").title())
     await _send_safe(to_email, f"✅ {label} results ready — VISUAR", html)

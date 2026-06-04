@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import { onboardingAPI } from "../lib/api";
+import { onboardingAPI, notifyAPI } from "../lib/api";
 
 const AuthContext = createContext({});
 
@@ -116,14 +116,24 @@ export const AuthProvider = ({ children }) => {
     onboardingLoading,
     markOnboardingComplete,
     checkOnboardingStatus,
-    signUp: (email, password, fullName) =>
-      supabase.auth.signUp({
+    signUp: async (email, password, fullName) => {
+      const result = await supabase.auth.signUp({
         email,
         password,
         options: { data: { full_name: fullName } },
-      }),
-    signIn: (email, password) =>
-      supabase.auth.signInWithPassword({ email, password }),
+      });
+      if (!result.error && result.data.session) {
+        await notifyAPI.signupNotify();
+      }
+      return result;
+    },
+    signIn: async (email, password) => {
+      const result = await supabase.auth.signInWithPassword({ email, password });
+      if (!result.error) {
+        await notifyAPI.loginNotify();
+      }
+      return result;
+    },
     signOut: async () => {
       const uid = userIdRef.current;
       // Do NOT clear the localStorage flag on sign-out — the user completed

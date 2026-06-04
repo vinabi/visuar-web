@@ -1,6 +1,12 @@
 # main.py
 from __future__ import annotations
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env before other local imports that read environment variables
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
 from fastapi import FastAPI, Request, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 import cv2
 import numpy as np
@@ -11,9 +17,7 @@ from gemini_analyzer import analyze_test_results
 from vision_module.vision import VisionModule
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
-from pathlib import Path
 from supabase import create_client, Client
 from google import genai as google_genai
 from google.genai import types as google_genai_types
@@ -46,13 +50,14 @@ from database import get_db, init_db
 from models import User, UserOnboardingProfile, TestResult
 from sqlalchemy.future import select
 from sqlalchemy import desc
-from email_service import send_welcome_email, send_login_email, send_test_result_email
+from email_service import (
+    send_welcome_email,
+    send_login_email,
+    send_test_result_email,
+    log_email_config_status,
+)
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-
-# Load .env from the same directory as this file
-env_path = Path(__file__).parent / ".env"
-load_dotenv(dotenv_path=env_path)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -85,6 +90,7 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def startup_event():
+    log_email_config_status()
     vision_module_instance.start()
     try:
         await init_db()
@@ -118,6 +124,15 @@ async def register_user(user: UserCreate, db=Depends(get_db)):
     return result
 
 # --- AUTH HELPER ---
+
+def _user_display_name(supabase_user, db_user) -> str:
+    meta = supabase_user.user_metadata or {}
+    name = (meta.get("full_name") or db_user.full_name or "").strip()
+    if name and name.lower() != "user":
+        return name
+    return supabase_user.email.split("@")[0]
+
+
 async def get_current_user(request: Request, db):
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -136,14 +151,17 @@ async def get_current_user(request: Request, db):
     email = auth_user.user.email
     print(f"[AUTH] Authenticated user: {email}")
     db_user = await get_user_by_email(db, email)
+    was_new = False
 
     if not db_user:
+        was_new = True
         print(f"[AUTH] New user — creating local record for {email}")
-        name = auth_user.user.user_metadata.get("full_name") or "User"
+        meta = auth_user.user.user_metadata or {}
+        name = meta.get("full_name") or email.split("@")[0]
         db_user = await create_user(db, UserCreate(email=email, name=name))
 
     print(f"[AUTH] DB user id={db_user.id} email={db_user.email}")
-    return {"supabase": auth_user.user, "db": db_user}
+    return {"supabase": auth_user.user, "db": db_user, "was_new": was_new}
 
 @app.get("/me")
 async def get_me(request: Request, db=Depends(get_db)):
@@ -154,15 +172,30 @@ async def get_me(request: Request, db=Depends(get_db)):
     }
 
 # --- NOTIFY ENDPOINTS ---
+@app.post("/api/notify/signup")
+async def notify_signup(request: Request, db=Depends(get_db)):
+    """Called by the frontend after a successful Supabase sign-up."""
+    cur = await get_current_user(request, db)
+    name = _user_display_name(cur["supabase"], cur["db"])
+    asyncio.create_task(send_welcome_email(cur["db"].email, name))
+    return {"ok": True, "email": "welcome"}
+
+
 @app.post("/api/notify/login")
 async def notify_login(request: Request, db=Depends(get_db)):
     """Called by the frontend once after a successful sign-in."""
     cur = await get_current_user(request, db)
-    name = cur["db"].full_name or cur["supabase"].email.split("@")[0]
+    name = _user_display_name(cur["supabase"], cur["db"])
+
+    # First backend contact (e.g. email-confirm flow) → welcome, not login alert
+    if cur["was_new"]:
+        asyncio.create_task(send_welcome_email(cur["db"].email, name))
+        return {"ok": True, "email": "welcome"}
+
     tz = ZoneInfo(os.getenv("EMAIL_TIMEZONE", "Asia/Karachi"))
     login_time = datetime.now(tz).strftime("%B %d, %Y at %I:%M %p %Z")
     asyncio.create_task(send_login_email(cur["db"].email, name, login_time))
-    return {"ok": True}
+    return {"ok": True, "email": "login"}
 
 # --- PLAN ENDPOINTS ---
 @app.get("/api/plan")
@@ -277,7 +310,7 @@ async def calibrate_vision(data: dict):
 async def save_test_result(payload: TestResultCreate, request: Request, db=Depends(get_db)):
     cur = await get_current_user(request, db)
     result = await create_test_result(db, cur["db"].id, payload)
-    name = cur["db"].full_name or cur["supabase"].email.split("@")[0]
+    name = _user_display_name(cur["supabase"], cur["db"])
     # Extract plain-text AI summary if stored as JSON
     ai_summary = None
     if payload.ai_summary:

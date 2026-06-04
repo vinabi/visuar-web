@@ -9,7 +9,6 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { notifyAPI } from "../lib/api";
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -30,7 +29,6 @@ export default function LoginPage() {
     try {
       const { error } = await signIn(email, password);
       if (error) throw error;
-      notifyAPI.loginNotify(); // fire-and-forget
       navigate("/dashboard");
     } catch (error) {
       setError(error.message || t("login.loginError"));
