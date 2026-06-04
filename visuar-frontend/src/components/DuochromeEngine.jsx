@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { getBrowserZoomWarning } from "../utils/visionScaling";
 import { applyDuochromeAdjustment, roundDiopter } from "../utils/refractionMath";
 import { getDuochromeRounds } from "../utils/testStimuli";
@@ -46,6 +46,8 @@ export function DuochromeEngine({
     return String(cfg?.letters || "FP").replace(/\s+/g, "").split("");
   };
   const [roundLetters, setRoundLetters] = useState(initialLetters);
+  const [feedback, setFeedback] = useState(null);
+  const roundStartRef = useRef(Date.now());
 
   const roundConfig = rounds[round] || rounds[rounds.length - 1];
   const letterPx = getRefractionDisplaySize(roundConfig.acuityLevel || acuityLevel, ppi);
@@ -63,22 +65,24 @@ export function DuochromeEngine({
 
   const handleChoice = useCallback(
     (side) => {
-      if (feedback) return; // debounce during flash
+      if (feedback) return;
       const rt = Date.now() - roundStartRef.current;
       setFeedback(side);
 
-      const rCount = redClearerCount + (choice === "red" ? 1 : 0);
-      const gCount = greenClearerCount + (choice === "green" ? 1 : 0);
-      const eCount = equalCount + (choice === "equal" ? 1 : 0);
+      const rCount = redClearerCount + (side === "red" ? 1 : 0);
+      const gCount = greenClearerCount + (side === "green" ? 1 : 0);
+      const eCount = equalCount + (side === "equal" ? 1 : 0);
 
-      if (choice === "red") setRedClearerCount(rCount);
-      else if (choice === "green") setGreenClearerCount(gCount);
+      if (side === "red") setRedClearerCount(rCount);
+      else if (side === "green") setGreenClearerCount(gCount);
       else setEqualCount(eCount);
 
-        // Catch round: don't adjust diopter estimate (it's a validity check only)
-        const newD = isCatch
-          ? currentD
-          : applyDuochromeAdjustmentWeighted(currentD, side, round);
+      const isCatch = !!roundConfig.catch;
+      const newD = isCatch ? currentD : applyDuochromeAdjustment(currentD, side);
+      if (!isCatch) setCurrentD(newD);
+
+      const nextChoices = [...choices, { side, rt, round }];
+      setChoices(nextChoices);
 
       const finish = () => {
         let refinementSignal = "balanced";
@@ -87,8 +91,8 @@ export function DuochromeEngine({
 
         onComplete({
           initialDiopter: roundDiopter(initialDiopter),
-          finalDiopter: adjusted,
-          duochromeD: adjusted,
+          finalDiopter: newD,
+          duochromeD: newD,
           choices: nextChoices,
           rounds: round + 1,
           redClearerCount: rCount,
@@ -105,16 +109,20 @@ export function DuochromeEngine({
 
       const nextRound = round + 1;
       setTimeout(() => {
+        setFeedback(null);
         setRound(nextRound);
         prepareNextRound(nextRound);
+        roundStartRef.current = Date.now();
       }, 400);
     },
     [
+      feedback,
       choices,
       currentD,
       initialDiopter,
       onComplete,
       round,
+      roundConfig,
       redClearerCount,
       greenClearerCount,
       equalCount,
@@ -152,9 +160,9 @@ export function DuochromeEngine({
 
   return (
     <div className="flex flex-col items-center justify-center w-full h-full p-4 select-none">
-      {zoomWarn && (
+      {zoomWarning && (
         <div className="mb-2 px-4 py-1.5 rounded-xl text-xs font-semibold text-amber-500 bg-amber-500/15">
-          ⚠️ {zoomWarn}
+          ⚠️ {zoomWarning}
         </div>
       )}
       <p className={`text-sm mb-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
@@ -234,7 +242,7 @@ export function DuochromeEngine({
 
       {/* Difficulty indicator */}
       <div className="mt-4 flex items-center gap-1.5">
-        {[...Array(total)].map((_, i) => {
+        {[...Array(rounds.length)].map((_, i) => {
           const done = i < round;
           const cur  = i === round;
           return (
