@@ -24,7 +24,11 @@ import {
 import { loadPersistedTestResult } from "../utils/lastTestResult";
 import { VISION_FOCUS_LABELS } from "../utils/visionFocus";
 import { API_URL } from "../lib/config";
-import { ScreeningResultCards, BilingualAIExplanation } from "../components/ScreeningResultCards";
+import { ScreeningResultCards } from "../components/ScreeningResultCards";
+import { TestResultsAIInsight } from "../components/TestResultsAIInsight";
+import { useResultsAIAnalysis } from "../hooks/useResultsAIAnalysis";
+import { onboardingAPI } from "../lib/api";
+import { emptyAiAnalysis } from "../lib/aiAnalysis";
 import { LandoltAcuitySummary } from "../components/LandoltAcuitySummary";
 import { landoltReportFromStoredDecimal } from "../utils/landoltAcuity";
 import { TestPrescriptionCard } from "../components/TestPrescriptionCard";
@@ -266,6 +270,17 @@ export default function ResultsPage() {
   const isNumericId = testId && /^\d+$/.test(testId);
   const [fetchedRecord, setFetchedRecord] = useState(null);
   const [fetchLoading, setFetchLoading] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+
+  useEffect(() => {
+    if (!session?.access_token) return;
+    onboardingAPI
+      .getProfile()
+      .then((p) => {
+        if (p) setUserProfile({ diet_habits: p.diet_habits, screen_time: p.screen_time });
+      })
+      .catch(() => {});
+  }, [session?.access_token]);
 
   useEffect(() => {
     if (resultState || persistedState) return;
@@ -434,14 +449,44 @@ export default function ResultsPage() {
   const landoltData = resultState?.landoltData || dbLandoltData;
   const rapidData = resultState?.rapidData || dbRapidData;
 
-  // ── AI analysis (state → DB → empty) ────────────────────
-  const aiAnalysis = contrastData?.aiAnalysis || orientationData?.aiAnalysis
-    || colorVisionData?.aiAnalysis || landoltData?.aiAnalysis || rapidData?.aiAnalysis || refractionData?.aiAnalysis
-    || resultState?.aiAnalysis || fetchedAI || { findings: [], recommendations: [], summary: "" };
-  const aiLoading = fetchLoading;
+  // ── AI analysis (state → DB → on-mount fetch) ───────────
+  const initialAi =
+    contrastData?.aiAnalysis ||
+    orientationData?.aiAnalysis ||
+    colorVisionData?.aiAnalysis ||
+    landoltData?.aiAnalysis ||
+    rapidData?.aiAnalysis ||
+    refractionData?.aiAnalysis ||
+    resultState?.aiAnalysis ||
+    persistedState?.aiAnalysis ||
+    fetchedAI ||
+    emptyAiAnalysis();
+
+  const effectiveSnellenState = resultState || persistedState || dbSnellenState;
+
+  const { aiAnalysis, aiLoading: aiFetchLoading } = useResultsAIAnalysis({
+    testType: effectiveTestType,
+    ctx: {
+      resultState: resultState || persistedState,
+      persistedState,
+      effectiveResultState: effectiveSnellenState,
+      contrastData,
+      orientationData,
+      colorVisionData,
+      landoltData,
+      rapidData,
+      refractionData,
+      userProfile,
+    },
+    initialAi,
+    userProfile,
+    persistSlug: testId && !isNumericId ? testId : null,
+  });
+
+  const aiLoading = fetchLoading || aiFetchLoading;
 
   // ── Effective result state for Snellen ───────────────────
-  const effectiveResultState = resultState || persistedState || dbSnellenState;
+  const effectiveResultState = effectiveSnellenState;
 
   const dateStr = new Date(
     resultState?.timestamp || persistedState?.timestamp || fetchedRecord?.created_at || Date.now()
@@ -592,6 +637,12 @@ export default function ResultsPage() {
             </div>
           )}
         </div>
+
+        <TestResultsAIInsight
+          ai={aiAnalysis}
+          isDarkMode={isDarkMode}
+          loading={aiFetchLoading && !(aiAnalysis?.summary || aiAnalysis?.findings?.length)}
+        />
       </>
     );
   }
@@ -1287,7 +1338,6 @@ export default function ResultsPage() {
         </div>
         <ScreeningResultCards estimate={finalEstimate} isDarkMode={isDarkMode} />
         <FindingsSection findings={findings} recommendations={recs} />
-        <BilingualAIExplanation ai={aiAnalysis} isDarkMode={isDarkMode} />
       </ResultsShell>
     );
   }
@@ -1633,7 +1683,6 @@ export default function ResultsPage() {
         <ScreeningResultCards estimate={snellenData.finalEstimate} isDarkMode={isDarkMode} />
       )}
       <FindingsSection findings={snellenFindings} recommendations={snellenRecs} />
-      <BilingualAIExplanation ai={aiAnalysis} isDarkMode={isDarkMode} />
     </ResultsShell>
   );
 }

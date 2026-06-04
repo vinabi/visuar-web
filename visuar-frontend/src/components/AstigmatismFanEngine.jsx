@@ -150,9 +150,16 @@ export function AstigmatismFanEngine({
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [hoverIndex, setHoverIndex] = useState(null);
   const [sliderStep, setSliderStep] = useState(0);
+  const [allEqualChosen, setAllEqualChosen] = useState(false);
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const isTouchRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const darkestLineAngle =
     selectedIndex != null ? lineAngleDeg(selectedIndex) : null;
@@ -171,7 +178,13 @@ export function AstigmatismFanEngine({
     };
   }, []);
 
-  const hitRadius = useCallback(() => (isTouchRef.current ? 24 : 16), []);
+  const hitRadius = useCallback(() => (isTouchRef.current ? 32 : 22), []);
+
+  const emitComplete = useCallback((payload) => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    onCompleteRef.current(payload);
+  }, []);
 
   useEffect(() => {
     if (phase === "FAN") {
@@ -187,6 +200,7 @@ export function AstigmatismFanEngine({
 
   const selectLine = useCallback((index) => {
     if (index == null) return;
+    setAllEqualChosen(false);
     setSelectedIndex(index);
   }, []);
 
@@ -233,7 +247,7 @@ export function AstigmatismFanEngine({
 
   const finishCrossPhase = useCallback(() => {
     const cyl = cylinderFromNormalizationStep(sliderStep);
-    onComplete({
+    emitComplete({
       cyl,
       axis: prescriptionAxis,
       darkestLineAngle,
@@ -245,10 +259,13 @@ export function AstigmatismFanEngine({
       confidence: sliderStep === 0 ? 0.8 : 0.85,
       allEqual: false,
     });
-  }, [sliderStep, prescriptionAxis, darkestLineAngle, selectedIndex, onComplete]);
+  }, [sliderStep, prescriptionAxis, darkestLineAngle, selectedIndex, emitComplete]);
 
   const handleAllEqual = useCallback(() => {
-    onComplete({
+    setAllEqualChosen(true);
+    setSelectedIndex(null);
+    setHoverIndex(null);
+    emitComplete({
       cyl: 0,
       axis: null,
       darkestLineAngle: null,
@@ -260,7 +277,7 @@ export function AstigmatismFanEngine({
       confidence: 0.75,
       allEqual: true,
     });
-  }, [onComplete]);
+  }, [emitComplete]);
 
   const fanInstruction =
     "Select the one line that looks darkest, thickest, or sharpest. If every line looks the same, choose All lines equal.";
@@ -356,7 +373,12 @@ export function AstigmatismFanEngine({
       <p className={`text-lg font-semibold mb-2 text-center max-w-lg ${isDarkMode ? "text-white" : "text-slate-800"}`}>
         {fanInstruction}
       </p>
-      {selectedIndex != null && (
+      {allEqualChosen && (
+        <p className={`text-sm mb-3 font-semibold ${isDarkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+          Recorded: all lines look equal (no cylinder)
+        </p>
+      )}
+      {selectedIndex != null && !allEqualChosen && (
         <p className={`text-sm mb-3 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}>
           Darkest line: {darkestLineAngle}° → prescription axis {prescriptionAxis}°
         </p>
@@ -382,8 +404,12 @@ export function AstigmatismFanEngine({
         <button
           type="button"
           onClick={handleAllEqual}
-          className={`px-6 py-3 rounded-full font-semibold ${
-            isDarkMode ? "bg-slate-700 text-white" : "bg-slate-200 text-slate-800"
+          className={`px-6 py-3 rounded-full font-semibold transition-all ${
+            allEqualChosen
+              ? "bg-emerald-500 text-white ring-2 ring-emerald-300"
+              : isDarkMode
+                ? "bg-slate-700 text-white hover:bg-slate-600"
+                : "bg-slate-200 text-slate-800 hover:bg-slate-300"
           }`}
         >
           All lines equal
