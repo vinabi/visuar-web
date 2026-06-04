@@ -822,7 +822,7 @@ export default function TestPage() {
             visionFocus,
             correctionMode,
             estimatedSphereD: eyeData.sphereD,
-            estimatedCylinderD: eyeData.cylinderD,
+            estimatedCylinderD: eyeData.cyl,
             estimatedAxis: eyeData.axis,
             singleDiopterD: eyeData.singleDiopterD,
             usedInFinalEstimate: true,
@@ -3482,7 +3482,7 @@ export default function TestPage() {
                   isDarkMode={isDarkMode}
                   visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
                   onComplete={handleAstigmatismComplete}
-                  showInstructions={!isRefractionBattery && !isSnellenTest && !isJaegerTest}
+                  showInstructions={!isRefractionBattery && !isSnellenTest && !isJaegerTest && testingEye === "left"}
                 />
                 </>
               )}

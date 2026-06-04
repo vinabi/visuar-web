@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>FastAPI + Supabase + Profile</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f5f7fa; margin: 0; }
+    .container { max-width: 750px; margin: auto; }
+    h2, h3 { color: #2c3e50; }
+    input, button, select { margin: 6px 0; padding: 11px; width: 100%; border-radius: 6px; border: 1px solid #ddd; font-size: 1em; }
+    button { background: #3498db; color: white; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    button:hover { background: #2980b9; }
+    pre { background: #ecf0f1; padding: 14px; border-radius: 6px; font-size: 0.9em; white-space: pre-wrap; }
+    .section { margin-top: 25px; padding: 22px; background: white; border-radius: 10px; box-shadow: 0 3px 12px rgba(0,0,0,0.08); }
+    .hidden { display: none; }
+    label { display: block; margin-top: 14px; font-weight: 600; color: #34495e; }
+    .btn-small { padding: 8px 12px; font-size: 0.9em; width: auto; display: inline-block; margin-right: 8px; }
+    .btn-success { background: #27ae60; }
+    .btn-success:hover { background: #1e8449; }
+    .btn-danger { background: #e74c3c; }
+    .btn-danger:hover { background: #c0392b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <h2>FastAPI + Supabase + Profile</h2>
+
+    <!-- AUTH -->
+    <div id="auth-section" class="section">
+      <h3>Login or Sign Up</h3>
+      <input id="email" placeholder="Email" type="email" />
+      <input id="password" type="password" placeholder="Password" />
+      <input id="name" placeholder="Full Name" />
+      <br><br>
+      <button id="signUpBtn">Sign Up</button>
+      <button id="signInBtn">Sign In</button>
+      <button id="getMeBtn">Get Me</button>
+      <button id="signOutBtn">Sign Out</button>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="user-info" class="section hidden">
+      <p>Logged in as: <strong><span id="user-email"></span></strong></p>
+      <div id="dashboard-buttons">
+        <button id="getMeBtnLoggedIn" class="btn-small">Get Info</button>
+        <button id="getProfileBtn" class="btn-small">Get Profile</button>
+        <button id="saveProfileBtn" class="btn-small btn-success">Save Demo</button>
+        <button id="editProfileBtn" class="btn-small">Edit Profile</button>
+        <button id="signOutBtnLoggedIn" class="btn-small btn-danger">Sign Out</button>
+      </div>
+    </div>
+
+    <!-- PROFILE FORM -->
+    <div id="profile-form" class="section hidden">
+      <h3>Complete Your Profile</h3>
+      <label>Occupation *</label>
+      <input id="p-occupation" placeholder="e.g. Engineer" />
+      <label>Screen Time (hrs)</label>
+      <input id="p-screen-time" type="number" min="0" max="24" />
+      <label>Wear Glasses?</label>
+      <select id="p-glasses"><option value="false">No</option><option value="true">Yes</option></select>
+      <label>Lens Power</label>
+      <input id="p-lens-power" placeholder="-1.5" />
+      <label>Lighting</label>
+      <input id="p-lighting" placeholder="Bright" />
+      <label>Work Env</label>
+      <input id="p-work-env" placeholder="Office" />
+      <label>Diet</label>
+      <input id="p-diet" placeholder="Balanced" />
+      <label>Eye Pain?</label>
+      <select id="p-eye-pain"><option value="false">No</option><option value="true">Yes</option></select>
+      <label>Sleep (hrs)</label>
+      <input id="p-sleep" type="number" min="0" max="24" />
+      <label>Medical History</label>
+      <input id="p-medical" placeholder="None" />
+      <label>Smoker?</label>
+      <select id="p-smoker"><option value="false">No</option><option value="true">Yes</option></select>
+      <label>Alcohol</label>
+      <input id="p-alcohol" placeholder="Occasional" />
+      <label>Exercise</label>
+      <input id="p-exercise" placeholder="3x/week" />
+      <label>Water</label>
+      <input id="p-water" placeholder="2L" />
+      <br><br>
+      <button id="submitProfileBtn" class="btn-success">Save Profile</button>
+      <button id="cancelProfileBtn">Cancel</button>
+    </div>
+
+    <!-- OUTPUT -->
+    <div class="section">
+      <pre id="output">Ready.</pre>
+    </div>
+
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+    const SUPABASE_URL = 'https://mzehrairflcofvzqshri.supabase.co'
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im16ZWhyYWlyZmxjb2Z2enFzaHJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEzNzU4NTUsImV4cCI6MjA3Njk1MTg1NX0.dBd0QUwOf60Ykuk-j4DqatVtGQSz5BEZPSV1uc2R8VI'
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
+    let accessToken = null
+    const API_URL = 'http://127.0.0.1:8000'
+
+    function output(data) {
+      document.getElementById('output').textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
+    }
+
+    function switchToLoggedIn(email) {
+      document.getElementById('auth-section').classList.add('hidden')
+      document.getElementById('user-info').classList.remove('hidden')
+      document.getElementById('user-email').textContent = email
+    }
+
+    function openProfileForm() {
+      document.getElementById('user-info').classList.add('hidden')
+      document.getElementById('profile-form').classList.remove('hidden')
+      loadProfileIntoForm()
+    }
+
+    function cancelProfile() {
+      document.getElementById('profile-form').classList.add('hidden')
+      document.getElementById('user-info').classList.remove('hidden')
+    }
+
+    async function loadProfileIntoForm() {
+      const profile = await getProfile()
+      const defaults = {
+        'p-occupation': 'Software Engineer',
+        'p-screen-time': 8,
+        'p-glasses': 'false',
+        'p-lens-power': '-1.2',
+        'p-lighting': 'Bright',
+        'p-work-env': 'Office',
+        'p-diet': 'Balanced',
+        'p-eye-pain': 'false',
+        'p-sleep': 7,
+        'p-medical': '',
+        'p-smoker': 'false',
+        'p-alcohol': 'Occasional',
+        'p-exercise': '3 times/week',
+        'p-water': '2L'
+      }
+      Object.keys(defaults).forEach(id => {
+        const el = document.getElementById(id)
+        if (el) {
+          const key = id.replace('p-', '')
+          const val = profile && profile[key] !== undefined && profile[key] !== null ? profile[key] : defaults[id]
+          el.value = val
+        }
+      })
+    }
+
+    async function checkSession() {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        accessToken = session.access_token
+        switchToLoggedIn(session.user.email)
+        await getMe()
+        setTimeout(checkAndOpenProfileForm, 800)
+      }
+    }
+
+    async function signUp() {
+      const email = document.getElementById('email').value.trim()
+      const password = document.getElementById('password').value
+      const name = document.getElementById('name').value.trim()
+      if (!email || !password || !name) return output('Fill all fields.')
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      output({ data, error })
+      if (!error && data.user) {
+        await syncUserToBackend(email, name)
+        accessToken = data.session?.access_token
+        switchToLoggedIn(email)
+        openProfileForm()
+      }
+    }
+
+    async function signIn() {
+      const email = document.getElementById('email').value.trim()
+      const password = document.getElementById('password').value
+      let name = document.getElementById('name').value.trim()
+      if (!email || !password) return output('Email & password required.')
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      output({ data, error })
+      if (!error && data.user) {
+        accessToken = data.session.access_token
+        if (!name) name = prompt("Full name:") || "User"
+        await syncUserToBackend(email, name)
+        switchToLoggedIn(email)
+        setTimeout(checkAndOpenProfileForm, 800)
+      }
+    }
+
+    async function syncUserToBackend(email, name) {
+      try {
+        await fetch(`${API_URL}/register-user`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, name }) })
+      } catch (e) {}
+    }
+
+    async function getMe() {
+      if (!accessToken) return output('Not logged in.')
+      const res = await fetch(`${API_URL}/me`, { headers: { Authorization: `Bearer ${accessToken}` } })
+      const json = await res.json()
+      output(json)
+    }
+
+    async function signOut() {
+      await supabase.auth.signOut()
+      accessToken = null
+      document.getElementById('auth-section').classList.remove('hidden')
+      document.getElementById('user-info').classList.add('hidden')
+      document.getElementById('profile-form').classList.add('hidden')
+      output('Signed out!')
+    }
+
+    // --- PROFILE ---
+    async function getProfile() {
+      if (!accessToken) { output('Not logged in.'); return null }
+      try {
+        const res = await fetch(`${API_URL}/profile`, { headers: { Authorization: `Bearer ${accessToken}` } })
+        if (res.status === 404) {
+          output('No profile found. Click "Edit Profile" to create one.')
+          return null
+        }
+        if (!res.ok) {
+          const err = await res.json()
+          output(`Error: ${err.detail}`)
+          return null
+        }
+        const profile = await res.json()
+        output({ message: 'Profile loaded!', data: profile })
+        return profile
+      } catch (err) {
+        output(`Network error: ${err.message}`)
+        return null
+      }
+    }
+
+    async function checkAndOpenProfileForm() {
+      const profile = await getProfile()
+      if (!profile) {
+        output('Opening profile form...')
+        setTimeout(openProfileForm, 600)
+      }
+    }
+
+    async function saveProfile(data) {
+      if (!accessToken) return output('Not logged in.')
+      try {
+        const res = await fetch(`${API_URL}/profile`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify(data)
+        })
+        const result = await res.json()
+        if (res.ok) {
+          output('Profile saved!')
+          cancelProfile()
+          await getProfile()
+        } else {
+          output(`Error: ${result.detail}`)
+        }
+      } catch (err) {
+        output(`Save failed: ${err.message}`)
+      }
+    }
+
+    async function saveDemoProfile() {
+      const demo = {
+        occupation: "Engineer", average_screen_time: 8, glasses_user: "true", lens_power: "-2.0",
+        lighting_environment: "Bright", work_environment: "Remote", diet_habits: "Balanced",
+        eye_pain_or_headache: "false", sleep_hours: 7, medical_history: "None",
+        smoker: "false", alcohol_consumption: "rarely", exercise_frequency: "3x/week", water_intake: "2.5L"
+      }
+      await saveProfile(demo)
+    }
+
+    async function submitProfile() {
+      const p = {
+        occupation: document.getElementById('p-occupation').value.trim(),
+        average_screen_time: parseInt(document.getElementById('p-screen-time').value) || 0,
+        glasses_user: document.getElementById('p-glasses').value,
+        lens_power: document.getElementById('p-lens-power').value.trim() || null,
+        lighting_environment: document.getElementById('p-lighting').value.trim() || "Unknown",
+        work_environment: document.getElementById('p-work-env').value.trim() || "Unknown",
+        diet_habits: document.getElementById('p-diet').value.trim() || "Not specified",
+        eye_pain_or_headache: document.getElementById('p-eye-pain').value,
+        sleep_hours: parseInt(document.getElementById('p-sleep').value) || 0,
+        medical_history: document.getElementById('p-medical').value.trim() || null,
+        smoker: document.getElementById('p-smoker').value,
+        alcohol_consumption: document.getElementById('p-alcohol').value.trim() || null,
+        exercise_frequency: document.getElementById('p-exercise').value.trim() || null,
+        water_intake: document.getElementById('p-water').value.trim() || null,
+      }
+      if (!p.occupation) return output('Occupation required.')
+      await saveProfile(p)
+    }
+
+    // --- EVENTS ---
+    document.getElementById('signUpBtn').onclick = signUp
+    document.getElementById('signInBtn').onclick = signIn
+    document.getElementById('getMeBtn').onclick = getMe
+    document.getElementById('signOutBtn').onclick = signOut
+    document.getElementById('getMeBtnLoggedIn').onclick = getMe
+    document.getElementById('getProfileBtn').onclick = getProfile
+    document.getElementById('saveProfileBtn').onclick = saveDemoProfile
+    document.getElementById('editProfileBtn').onclick = openProfileForm
+    document.getElementById('signOutBtnLoggedIn').onclick = signOut
+    document.getElementById('submitProfileBtn').onclick = submitProfile
+    document.getElementById('cancelProfileBtn').onclick = cancelProfile
+
+    checkSession()
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.0
+python-dotenv==1.0.1
+SQLAlchemy==2.0.36
+greenlet>=3.0.0
+asyncpg==0.30.0
+supabase>=2.13.0
+pydantic[email]==2.9.2
+websockets>=14.0,<15.1
+opencv-python>=4.8.0
+mediapipe>=0.10.14,<0.10.21
+numpy>=1.24.0
+google-genai>=1.0.0
+aiosmtplib>=4.0.0
+# RAG / knowledge ingestion (used by scripts/ — also available in the server env)
+langchain-google-genai>=2.0.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0

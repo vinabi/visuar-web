@@ -183,7 +183,11 @@ export function AstigmatismFanEngine({
   const emitComplete = useCallback((payload) => {
     if (completedRef.current) return;
     completedRef.current = true;
-    onCompleteRef.current(payload);
+    try {
+      onCompleteRef.current(payload);
+    } catch {
+      completedRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
