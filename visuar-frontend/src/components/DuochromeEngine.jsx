@@ -9,9 +9,9 @@ const FEEDBACK_MS = 300;
 /** Covert validity check — blurred red side; correct answer is green. */
 const CATCH_ROUND_INDEX = 7;
 
-/** Balanced duochrome panels — vivid enough for the test, not heavy dark red/green. */
-const DUO_RED = { base: "#E85A5A", active: "#F47373" };
-const DUO_GREEN = { base: "#3CB87A", active: "#52D492" };
+/** Deep duochrome panels — strong red/green for clinical contrast. */
+const DUO_RED = { base: "#B91C1C", active: "#DC2626" };
+const DUO_GREEN = { base: "#15803D", active: "#16A34A" };
 
 function genPair(count) {
   const n = Math.max(2, count || 3);
