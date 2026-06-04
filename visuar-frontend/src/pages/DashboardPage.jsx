@@ -27,6 +27,7 @@ import { useTheme } from "../context/ThemeContext";
 import { usePlan } from "../context/PlanContext";
 import { API_URL } from "../lib/config";
 import { startNewScreeningSession } from "../utils/screeningSession";
+import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
 export default function DashboardPage() {
   const { t } = useTranslation();
@@ -49,7 +50,6 @@ export default function DashboardPage() {
     "refraction-battery": "Full Refraction Battery",
     "duochrome-refinement": "Duochrome Test",
     "refraction-simulator": "Refraction Simulator",
-    "astigmatism-fan": "Astigmatism Fan",
   };
 
   const handleLogout = async () => {
@@ -66,53 +66,77 @@ export default function DashboardPage() {
 
   // Fetch real test history from database
   useEffect(() => {
+    const token = session?.access_token;
+    if (!token) {
+      setHistoryLoading(false);
+      setFetchError("not_authenticated");
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
     const fetchHistory = async () => {
       setFetchError(null);
-
-      if (!session?.access_token) {
-        console.warn("[Dashboard] No session token — user not authenticated");
-        setHistoryLoading(false);
-        setFetchError("not_authenticated");
-        return;
-      }
+      setHistoryLoading(true);
 
       try {
-        const res = await fetch(`${API_URL}/api/test-results`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
+        const res = await fetchWithTimeout(
+          `${API_URL}/api/test-results`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal,
+          },
+          15000
+        );
 
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           console.error(`[Dashboard] API error ${res.status}:`, body);
-          setFetchError(`api_error_${res.status}`);
-          setHistoryLoading(false);
+          if (!cancelled) setFetchError(`api_error_${res.status}`);
           return;
         }
 
         const data = await res.json();
+        if (!Array.isArray(data)) {
+          console.error("[Dashboard] Unexpected API response:", data);
+          if (!cancelled) setFetchError("api_error_invalid");
+          return;
+        }
+
         console.log(`[Dashboard] Fetched ${data.length} test records for user ${user?.email}`);
 
-        setTestHistory(
-          data.map((r) => ({
-            id: r.id,
-            testType: r.test_type,
-            date: r.created_at,
-            type: TEST_TYPE_LABELS[r.test_type] || r.test_type,
-            score: r.overall_score,
-            left_acuity: r.left_eye_acuity,
-            right_acuity: r.right_eye_acuity,
-            status: r.overall_score >= 80 ? "excellent" : r.overall_score >= 50 ? "good" : "poor",
-          }))
-        );
+        if (!cancelled) {
+          setTestHistory(
+            data.map((r) => ({
+              id: r.id,
+              testType: r.test_type,
+              date: r.created_at,
+              type: TEST_TYPE_LABELS[r.test_type] || r.test_type,
+              score: r.overall_score,
+              left_acuity: r.left_eye_acuity,
+              right_acuity: r.right_eye_acuity,
+              status: r.overall_score >= 80 ? "excellent" : r.overall_score >= 50 ? "good" : "poor",
+            }))
+          );
+        }
       } catch (err) {
+        if (cancelled || err?.name === "AbortError") return;
         console.error("[Dashboard] Network error fetching history:", err);
-        setFetchError("network_error");
+        if (!cancelled) setFetchError("network_error");
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
       }
-      setHistoryLoading(false);
     };
+
     fetchHistory();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session?.access_token]);
 
   const averageScore = testHistory.length > 0
     ? Math.round(testHistory.reduce((sum, t) => sum + t.score, 0) / testHistory.length)

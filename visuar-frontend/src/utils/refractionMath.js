@@ -63,39 +63,6 @@ export function applyDuochromeAdjustmentWeighted(diopter, choice, roundIndex) {
   return roundDiopter(diopter + (choice === "red" ? -step : step));
 }
 
-/** Quarter-diopter steps on the cross-line normalization slider (0 … 4 → 0 … −1.00 D). */
-export const ASTIGMATISM_CYL_MAX_STEP = 4;
-export const ASTIGMATISM_CYL_STEP_DIOPTER = 0.25;
-
-/**
- * Prescription axis from the darkest fan line angle (perpendicular rule).
- * Axis = (line angle + 90°) mod 180°.
- */
-export function darkestLineAngleToPrescriptionAxis(lineAngleDeg) {
-  const a = Number(lineAngleDeg);
-  if (!Number.isFinite(a)) return null;
-  return Math.round(((a + 90) % 180 + 180) % 180);
-}
-
-/** CYL from cross-line slider step: step × −0.25 D. */
-export function cylinderFromNormalizationStep(step) {
-  const n = Math.max(0, Math.min(ASTIGMATISM_CYL_MAX_STEP, Math.round(Number(step) || 0)));
-  return roundDiopter(-n * ASTIGMATISM_CYL_STEP_DIOPTER);
-}
-
-/** @deprecated Use darkestLineAngleToPrescriptionAxis with a single line index angle. */
-export function linesToAxis(selectedIndices, lineCount = 12) {
-  if (!selectedIndices?.length) return null;
-  const lineAngle = Math.round((selectedIndices[0] * 180) / lineCount) % 180;
-  return darkestLineAngleToPrescriptionAxis(lineAngle);
-}
-
-/** @deprecated Use cylinderFromNormalizationStep after the cross-line slider phase. */
-export function linesToCylinder(_selectedIndices, allEqual) {
-  if (allEqual) return 0;
-  return 0;
-}
-
 /** Format prescription for display. */
 export function formatPrescription({ sph, cyl, axis }) {
   const s = sph >= 0 ? `+${sph.toFixed(2)}` : sph.toFixed(2);

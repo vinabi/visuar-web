@@ -39,7 +39,6 @@ import { ColorVisionEngine } from "../components/ColorVisionEngine";
 import { RapidRecognitionEngine } from "../components/RapidRecognitionEngine";
 import { DuochromeEngine } from "../components/DuochromeEngine";
 import { RefractionSimulatorEngine } from "../components/RefractionSimulatorEngine";
-import { AstigmatismFanEngine } from "../components/AstigmatismFanEngine";
 import { RefractionBatteryProgress } from "../components/RefractionBatteryProgress";
 import { EyeCoverGuide } from "../components/vision/EyeCoverGuide";
 import { EyeRestReminder } from "../components/EyeRestReminder";
@@ -102,7 +101,6 @@ const IMPLEMENTED_TESTS = [
   "refraction-battery",
   "duochrome-refinement",
   "refraction-simulator",
-  "astigmatism-fan",
   "complete",
   "quick-screener",
 ];
@@ -183,8 +181,7 @@ export default function TestPage() {
   const isRefractionBattery = testId === "refraction-battery";
   const isDuochromeTest = testId === "duochrome-refinement";
   const isRefractionSimulatorTest = testId === "refraction-simulator";
-  const isAstigmatismTest = testId === "astigmatism-fan";
-  const isRefractionSubTest = isDuochromeTest || isRefractionSimulatorTest || isAstigmatismTest;
+  const isRefractionSubTest = isDuochromeTest || isRefractionSimulatorTest;
   const isRefractionFlow = isRefractionBattery || isRefractionSubTest;
   const isImplemented = IMPLEMENTED_TESTS.includes(testId);
 
@@ -257,6 +254,7 @@ export default function TestPage() {
   const contrastEyeResultsRef = useRef({ left: null, right: null });
   const orientationEyeResultsRef = useRef({ left: null, right: null });
   const landoltEyeResultsRef = useRef({ left: null, right: null });
+  const colorVisionEyeResultsRef = useRef({ left: null, right: null });
   const rapidEyeResultsRef = useRef({ left: null, right: null });
 
   // Refraction battery / sub-test orchestration
@@ -324,12 +322,6 @@ export default function TestPage() {
     isDuochromeTest || (isRefractionBattery && refractionSubPhase === "duochrome");
   const showSimulatorEngine =
     isRefractionSimulatorTest || (isRefractionBattery && refractionSubPhase === "simulator");
-  const showAstigmatismEngine =
-    isAstigmatismTest ||
-    (isRefractionBattery && refractionSubPhase === "astigmatism") ||
-    (isSnellenTest && snellenSubPhase === "astigmatism") ||
-    (isJaegerTest && jaegerSubPhase === "astigmatism");
-
   // Pre-check lock
   const lockStartRef = useRef(null);
   const [lockProgress, setLockProgress] = useState(0);
@@ -349,10 +341,17 @@ export default function TestPage() {
   }, [testingEye]);
 
   useEffect(() => {
-    if (testPhase === "TESTING" && (isAstigmatismTest || isRefractionFlow)) {
+    if (!isColorVisionTest) return;
+    colorVisionEyeResultsRef.current = { left: null, right: null };
+    setTestingEye("left");
+    testingEyeRef.current = "left";
+  }, [testId, isColorVisionTest]);
+
+  useEffect(() => {
+    if (testPhase === "TESTING" && isRefractionFlow) {
       finishingRef.current = false;
     }
-  }, [testPhase, testingEye, isAstigmatismTest, isRefractionFlow]);
+  }, [testPhase, testingEye, isRefractionFlow]);
 
   // Refs
   const videoRef = useRef(null);
@@ -551,11 +550,10 @@ export default function TestPage() {
             : "distance";
       const distOk =
         isDistanceOkForMode(vr, viewMode) || vr.distance_status === "ok";
-      // Binocular tests (colour vision) don't require eye cover
       const ok =
         vr.face_detected &&
         distOk &&
-        (isColorVisionTest || isExpectedEyeCovered(vr.eye_state, testingEye));
+        isExpectedEyeCovered(vr.eye_state, testingEye);
       if (ok) {
         badSinceRef.current = null;
         if (!lockStartRef.current) lockStartRef.current = Date.now();
@@ -589,8 +587,7 @@ export default function TestPage() {
       const vr = visionResultRef.current;
       if (!vr || !vr.face_detected) return;
 
-      const eyeOk =
-        isColorVisionTest || isExpectedEyeCovered(vr.eye_state, testingEye);
+      const eyeOk = isExpectedEyeCovered(vr.eye_state, testingEye);
 
       if (eyeOk) {
         eyeBadSinceRef.current = null;
@@ -615,7 +612,7 @@ export default function TestPage() {
       }
     }, 200);
     return () => clearInterval(tick);
-  }, [testPhase, testingEye, isColorVisionTest, showSnellenEngine]);
+  }, [testPhase, testingEye, showSnellenEngine]);
 
   const dismissEyePauseOverlay = useCallback((manualResume = false) => {
     eyeBadSinceRef.current = null;
@@ -630,9 +627,7 @@ export default function TestPage() {
 
   const tryResumeFromEyePause = useCallback(() => {
     const vr = visionResultRef.current;
-    const eyeOk =
-      isColorVisionTest ||
-      (vr?.face_detected && isExpectedEyeCovered(vr.eye_state, testingEye));
+    const eyeOk = vr?.face_detected && isExpectedEyeCovered(vr.eye_state, testingEye);
 
     if (eyeOk) {
       dismissEyePauseOverlay(false);
@@ -641,7 +636,7 @@ export default function TestPage() {
 
     // User override — resume even if the model has not confirmed cover yet
     dismissEyePauseOverlay(true);
-  }, [testingEye, isColorVisionTest, dismissEyePauseOverlay]);
+  }, [testingEye, dismissEyePauseOverlay]);
 
   // ─── Calibrate ─────────────────────────────────────────
   const handleCalibrate = useCallback(async () => {
@@ -681,16 +676,6 @@ export default function TestPage() {
       axis: buf.axis,
       forceNear: unit === "jaeger",
     });
-  }, []);
-
-  const beginAstigmatismPhase = useCallback((setSubPhase) => {
-    setSubPhase("astigmatism");
-    setTestingEye("left");
-    setRefractionEngineKey((k) => k + 1);
-    finishingRef.current = false;
-    setIsSaving(false);
-    levelResultFiredRef.current = false;
-    setTestPhase("INSTRUCTION");
   }, []);
 
   const offerResultsWithSessionSummary = useCallback(
@@ -786,95 +771,6 @@ export default function TestPage() {
     let right;
     let overallScore = 70;
 
-    const buildAstigEye = (eye) => {
-      const buf = refractionBufferRef.current[eye] || {};
-      const sessionSph = getSessionSphereForEye(eye);
-      const rx = buildTestEyePrescription({
-        acuity: buf.acuity,
-        unit: "decimal",
-        cylinderD: buf.cyl ?? 0,
-        axis: buf.axis,
-      });
-      const sph = sessionSph ?? rx.sph;
-      return {
-        ...rx,
-        sph,
-        sphereD: sph,
-        diopter: sph,
-        singleDiopterD: computeSingleDiopterD(sph, rx.cyl),
-      };
-    };
-
-    if (isAstigmatismTest) {
-      left = buildAstigEye("left");
-      right = buildAstigEye("right");
-
-      const payload = {
-        leftEye: left,
-        rightEye: right,
-        testType: tid,
-        visionFocus,
-        correctionMode,
-        overallScore,
-        timestamp: new Date().toISOString(),
-      };
-
-      ["left", "right"].forEach((eye) => {
-        const eyeData = eye === "left" ? left : right;
-        appendScreeningResult(
-          normalizeTestResultRecord({
-            testName: testMeta?.title || "Astigmatism Fan",
-            testId: tid,
-            eye,
-            visionFocus,
-            correctionMode,
-            estimatedSphereD: eyeData.sphereD,
-            estimatedCylinderD: eyeData.cyl,
-            estimatedAxis: eyeData.axis,
-            singleDiopterD: eyeData.singleDiopterD,
-            usedInFinalEstimate: true,
-            usedInSessionAverage: false,
-          })
-        );
-      });
-
-      finishingRef.current = false;
-      stopCamera();
-      persistTestResult(tid, payload);
-      navigate(`/results/${tid}`, { state: payload });
-
-      void runPostTestAI(
-        "astigmatism_fan",
-        () =>
-          buildGeminiScreeningPayload(null, {
-            screening_explanation: true,
-            test_type: "astigmatism_fan",
-            correctionMode,
-            visionFocus,
-            refractionResult: {
-              leftSphereD: left.sph ?? left.diopter,
-              rightSphereD: right.sph ?? right.diopter,
-              leftCylinderD: left.cyl ?? 0,
-              rightCylinderD: right.cyl ?? 0,
-              leftAxis: left.axis,
-              rightAxis: right.axis,
-            },
-          }),
-        { slug: tid }
-      ).then((aiData) => {
-        if (aiData?.aiAnalysis?.findings?.length) {
-          persistTestResult(tid, { ...payload, aiAnalysis: aiData.aiAnalysis });
-        }
-      });
-
-      void persistStandaloneRefractionToDb(tid, payload).then(async (saved) => {
-        if (!saved?.id) return;
-        const enriched = { ...payload, savedResultId: saved.id };
-        persistTestResult(tid, enriched);
-      });
-      return;
-    }
-
     if (isDuochromeTest || isRefractionSimulatorTest) {
       const pickEye = (eye) => {
         const buf = refractionBufferRef.current[eye] || {};
@@ -958,11 +854,11 @@ export default function TestPage() {
     } catch (err) {
       console.error("[VISUAR] Standalone refraction finalize error:", err);
       finishingRef.current = false;
+      setIsSaving(false);
     }
   }, [
     testId,
     correctionMode,
-    isAstigmatismTest,
     isDuochromeTest,
     isRefractionSimulatorTest,
     offerResultsWithSessionSummary,
@@ -976,13 +872,12 @@ export default function TestPage() {
   useEffect(() => {
     if (isDuochromeTest) setRefractionSubPhase("duochrome");
     else if (isRefractionSimulatorTest) setRefractionSubPhase("simulator");
-    else if (isAstigmatismTest) setRefractionSubPhase("astigmatism");
     else if (isRefractionBattery) {
       setRefractionSubPhase(
         getVisionFocus() === VISION_FOCUS.NEAR ? "jaeger" : "snellen"
       );
     }
-  }, [isDuochromeTest, isRefractionSimulatorTest, isAstigmatismTest, isRefractionBattery]);
+  }, [isDuochromeTest, isRefractionSimulatorTest, isRefractionBattery]);
 
   const getRefractionInitialD = useCallback(
     (eye) => {
@@ -1176,10 +1071,7 @@ export default function TestPage() {
       }
       setRefractionEngineKey((k) => k + 1);
       setTestPhase("INSTRUCTION");
-    } else if (
-      (isAstigmatismTest || isDuochromeTest || isRefractionSimulatorTest) &&
-      !isRefractionBattery
-    ) {
+    } else if ((isDuochromeTest || isRefractionSimulatorTest) && !isRefractionBattery) {
       finalizeStandaloneRefractionSubtest();
     } else {
       finalizeRefractionResults();
@@ -1187,7 +1079,6 @@ export default function TestPage() {
   }, [
     isRefractionBattery,
     refractionSubPhase,
-    isAstigmatismTest,
     isDuochromeTest,
     isRefractionSimulatorTest,
     finalizeStandaloneRefractionSubtest,
@@ -1249,10 +1140,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        setRefractionSubPhase("astigmatism");
-        setTestingEye("left");
-        setRefractionEngineKey((k) => k + 1);
-        setTestPhase("INSTRUCTION");
+        finalizeRefractionResults();
         return;
       }
 
@@ -1264,63 +1152,7 @@ export default function TestPage() {
         advanceRefractionAfterEye();
       }
     },
-    [testingEye, isRefractionBattery, isRefractionSimulatorTest, advanceRefractionAfterEye]
-  );
-
-  const finalizeSnellenRef = useRef(null);
-  const finalizeJaegerRef = useRef(null);
-
-  const handleAstigmatismComplete = useCallback(
-    (result) => {
-      const eye = testingEyeRef.current;
-      refractionBufferRef.current[eye] = {
-        ...refractionBufferRef.current[eye],
-        cyl: result.cyl,
-        axis: result.axis,
-        allEqual: result.allEqual === true,
-      };
-
-      if (isSnellenTest && snellenSubPhase === "astigmatism") {
-        if (eye === "left") {
-          testingEyeRef.current = "right";
-          setTestingEye("right");
-          setRefractionEngineKey((k) => k + 1);
-          setTestPhase("INSTRUCTION");
-          return;
-        }
-        finalizeSnellenRef.current?.();
-        return;
-      }
-
-      if (isJaegerTest && jaegerSubPhase === "astigmatism") {
-        if (eye === "left") {
-          testingEyeRef.current = "right";
-          setTestingEye("right");
-          setRefractionEngineKey((k) => k + 1);
-          setTestPhase("INSTRUCTION");
-          return;
-        }
-        finalizeJaegerRef.current?.();
-        return;
-      }
-
-      if (isAstigmatismTest && !isRefractionBattery) {
-        advanceRefractionAfterEye();
-        return;
-      }
-
-      if (isRefractionBattery) {
-        const prescription = buildEyePrescription({
-          ...refractionBufferRef.current[eye],
-          metrics: {
-            simulatorConsistency: refractionBufferRef.current[eye]?.simulatorConsistency ?? 0.85,
-          },
-        });
-        resultsRef.current[eye] = prescription;
-        advanceRefractionAfterEye();
-      }
-    },
-    [isAstigmatismTest, isRefractionBattery, isSnellenTest, snellenSubPhase, isJaegerTest, jaegerSubPhase, advanceRefractionAfterEye]
+    [testingEye, isRefractionBattery, isRefractionSimulatorTest, advanceRefractionAfterEye, finalizeRefractionResults]
   );
 
   // ─── Save results to database ──────────────────────────
@@ -1574,11 +1406,6 @@ export default function TestPage() {
       { slug: "jaeger-acuity", navStateRef: pendingNavRef }
     );
   }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary, runPostTestAI]);
-
-  useEffect(() => {
-    finalizeSnellenRef.current = finalizeStandaloneSnellenResults;
-    finalizeJaegerRef.current = finalizeStandaloneJaegerResults;
-  }, [finalizeStandaloneSnellenResults, finalizeStandaloneJaegerResults]);
 
   const resetForNextAssessmentStep = useCallback(() => {
     setTestingEye("left");
@@ -2035,16 +1862,54 @@ export default function TestPage() {
     ]
   );
 
-  // ─── Colour Vision completion (binocular — single pass) ──
+  // ─── Colour Vision completion (per-eye, same cover rules as other tests) ──
   const handleColorVisionComplete = useCallback(
     async (results) => {
+      if (testingEye === "left") {
+        colorVisionEyeResultsRef.current.left = results;
+        finishingRef.current = false;
+        setTestingEye("right");
+        setNonSnellenResetToken((t) => t + 1);
+        setTestPhase("INSTRUCTION");
+        return;
+      }
+
       if (finishingRef.current) return;
       finishingRef.current = true;
       setIsSaving(true);
 
+      colorVisionEyeResultsRef.current.right = results;
+      const L = colorVisionEyeResultsRef.current.left || results;
+      const R = results;
+      const overallScore = Math.round(((L.score ?? 0) + (R.score ?? 0)) / 2);
+      const mergedRounds = [
+        ...(L.rounds || []).map((r) => ({ ...r, eye: "left" })),
+        ...(R.rounds || []).map((r) => ({ ...r, eye: "right" })),
+      ];
+      const merged = {
+        score: overallScore,
+        cvdRisk: [L.cvdRisk, R.cvdRisk].includes("High")
+          ? "High"
+          : [L.cvdRisk, R.cvdRisk].includes("Moderate")
+            ? "Moderate"
+            : [L.cvdRisk, R.cvdRisk].includes("Low")
+              ? "Low"
+              : "None",
+        cvdType: L.cvdType !== "Unknown" ? L.cvdType : R.cvdType,
+        accuracySc: Math.round(((L.accuracySc ?? 0) + (R.accuracySc ?? 0)) / 2),
+        speedSc: Math.round(((L.speedSc ?? 0) + (R.speedSc ?? 0)) / 2),
+        l1Errors: (L.l1Errors ?? 0) + (R.l1Errors ?? 0),
+        l1Total: (L.l1Total ?? 0) + (R.l1Total ?? 0),
+        totalPlates: (L.totalPlates ?? 0) + (R.totalPlates ?? 0),
+        rounds: mergedRounds,
+        pauseCount: (L.pauseCount ?? 0) + (R.pauseCount ?? 0),
+        leftEye: L,
+        rightEye: R,
+      };
+
       const emptyAi = { findings: [], recommendations: [], summary: "" };
       const navState = {
-        colorVisionData: { ...results, aiAnalysis: emptyAi },
+        colorVisionData: { ...merged, aiAnalysis: emptyAi },
         timestamp: new Date().toISOString(),
         correctionMode,
         visionFocus: getVisionFocus(),
@@ -2059,13 +1924,15 @@ export default function TestPage() {
           test_type: "color_vision",
           correctionMode,
           visionFocus: getVisionFocus(),
-          overall_score: results.score,
-          cvd_risk: results.cvdRisk,
-          cvd_type: results.cvdType,
-          accuracy: results.accuracySc,
-          total_plates: results.totalPlates,
-          level1_errors: results.l1Errors,
-          level1_total: results.l1Total,
+          overall_score: merged.score,
+          cvd_risk: merged.cvdRisk,
+          cvd_type: merged.cvdType,
+          accuracy: merged.accuracySc,
+          total_plates: merged.totalPlates,
+          level1_errors: merged.l1Errors,
+          level1_total: merged.l1Total,
+          leftEye: { score: L.score, cvdRisk: L.cvdRisk },
+          rightEye: { score: R.score, cvdRisk: R.cvdRisk },
         }),
         { slug: "color-vision" }
       ).then((aiData) => {
@@ -2078,7 +1945,7 @@ export default function TestPage() {
           },
           body: JSON.stringify({
             test_type: "color-vision",
-            overall_score: results.score,
+            overall_score: merged.score,
             ai_findings: aiData.ai_findings,
             ai_recommendations: aiData.ai_recommendations,
             ai_summary: aiData.ai_summary,
@@ -2086,7 +1953,7 @@ export default function TestPage() {
         }).catch((err) => console.error("[VISUAR] Color vision save error:", err));
       });
     },
-    [session, navigate, stopCamera, correctionMode, runPostTestAI]
+    [session, navigate, stopCamera, testingEye, correctionMode, runPostTestAI]
   );
 
   // ─── Landolt C acuity completion (per-eye) ────────────
@@ -2361,7 +2228,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        beginAstigmatismPhase(setSnellenSubPhase);
+        void finalizeStandaloneSnellenResults();
         return;
       }
 
@@ -2435,7 +2302,7 @@ export default function TestPage() {
       isCompleteAssessment,
       activeAssessmentStep,
       advanceAssessmentStep,
-      beginAstigmatismPhase,
+      finalizeStandaloneSnellenResults,
     ]
   );
 
@@ -2525,7 +2392,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        beginAstigmatismPhase(setJaegerSubPhase);
+        void finalizeStandaloneJaegerResults();
         return;
       }
 
@@ -2579,7 +2446,7 @@ export default function TestPage() {
       advanceAssessmentStep,
       offerResultsWithSessionSummary,
       correctionMode,
-      beginAstigmatismPhase,
+      finalizeStandaloneJaegerResults,
       applyJaegerEyeResult,
     ]
   );
@@ -2834,7 +2701,7 @@ export default function TestPage() {
         key = "pre_check_face_issue";
       } else if (vr.distance_status !== "ok") {
         key = "pre_check_distance_issue";
-      } else if (vr.eye_state !== expectedCover) {
+      } else if (!isExpectedEyeCovered(vr.eye_state, testingEye)) {
         key = testingEye === "left" ? "pre_check_right" : "pre_check_left";
       }
       if (!key) { badSince = null; return; }
@@ -2932,7 +2799,7 @@ export default function TestPage() {
       <canvas ref={canvasRef} style={{ display: "none" }} />
 
       {/* ── EYE VIOLATION WARNING OVERLAY ── */}
-      {eyeWarningVisible && !isColorVisionTest && (
+      {eyeWarningVisible && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
           <div className={`max-w-lg w-full mx-4 p-8 rounded-3xl text-center shadow-2xl ${
             isDarkMode ? "bg-amber-950/90 border border-amber-500/50" : "bg-white border-2 border-amber-300"
@@ -3273,31 +3140,11 @@ export default function TestPage() {
           <div className={`backdrop-blur-md rounded-3xl shadow-xl p-8 md:p-10 transition-colors ${
             isDarkMode ? "bg-[#1a1f3a]/80 border border-slate-700/50" : "bg-white/80 border border-white/40"
           }`}>
-            {isColorVisionTest ? (
-              <div className="flex flex-col items-center text-center gap-4">
-                <EyeRestReminder isDarkMode={isDarkMode} className="max-w-lg" />
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center ${isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"}`}>
-                  <svg viewBox="0 0 32 32" className="w-8 h-8"><circle cx="10" cy="16" r="7" fill="#e03030" opacity="0.85" /><circle cx="22" cy="16" r="7" fill="#30aa30" opacity="0.85" /><circle cx="16" cy="16" r="7" fill="#e08030" opacity="0.75" /></svg>
-                </div>
-                <h2 className={`text-3xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>Colour Vision Test</h2>
-                <p className={`text-lg max-w-sm ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
-                  Keep <strong>both eyes open</strong> for this test — no eye covering needed.
-                  Position yourself comfortably in front of the camera.
-                </p>
-                <button
-                  onClick={() => setTestPhase("PRE_CHECK")}
-                  className="mt-2 px-10 py-4 rounded-full text-lg font-bold bg-cyan-500 hover:bg-cyan-400 text-white transition-all shadow-lg"
-                >
-                  Continue
-                </button>
-              </div>
-            ) : (
-              <EyeCoverGuide
-                eye={testingEye}
-                isDarkMode={isDarkMode}
-                onStart={() => setTestPhase("PRE_CHECK")}
-              />
-            )}
+            <EyeCoverGuide
+              eye={testingEye}
+              isDarkMode={isDarkMode}
+              onStart={() => setTestPhase("PRE_CHECK")}
+            />
           </div>
         )}
 
@@ -3325,7 +3172,7 @@ export default function TestPage() {
                     <StatusIndicator label="Distance" ok={visionResult.distance_status === "ok"}
                       valueOk={visionResult.distance_cm ? `${visionResult.distance_cm} cm ✓` : "---"}
                       valueBad={visionResult.distance_cm ? `${visionResult.distance_cm} cm` : "No face"} />
-                    <StatusIndicator label="Eye Cover" ok={visionResult.eye_state === expectedCover}
+                    <StatusIndicator label="Eye Cover" ok={isExpectedEyeCovered(visionResult.eye_state, testingEye)}
                       valueOk={`${coveredEyeLabel} Covered ✓`}
                       valueBad={visionResult.eye_state.replace(/_/g, " ").toUpperCase()} />
                   </div>
@@ -3438,9 +3285,11 @@ export default function TestPage() {
               )}
               {showColorVisionEngine && (
                 <ColorVisionEngine
-                  key={`cv-${nonSnellenResetToken}`}
+                  key={`cv-${testingEye}-${nonSnellenResetToken}`}
                   isDarkMode={isDarkMode}
-                  visionOk={testPhase === "TESTING" && isConditionsMet}
+                  visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
+                  coveredEyeLabel={coveredEyeLabel}
+                  testingEyeLabel={testingEyeLabel}
                   onTestComplete={handleColorVisionComplete}
                 />
               )}
@@ -3488,29 +3337,6 @@ export default function TestPage() {
                   showInstructions={!isRefractionBattery}
                   quickMode={quickMode}
                 />
-              )}
-              {showAstigmatismEngine && (
-                <>
-                  {(isSnellenTest && snellenSubPhase === "astigmatism") ||
-                  (isJaegerTest && jaegerSubPhase === "astigmatism") ? (
-                    <div
-                      className={`mb-3 px-4 py-2 rounded-xl text-sm font-semibold text-center ${
-                        isDarkMode
-                          ? "bg-violet-500/10 text-violet-300 border border-violet-500/30"
-                          : "bg-violet-50 text-violet-800 border border-violet-200"
-                      }`}
-                    >
-                      Astigmatism check — tap the single line that looks darkest or sharpest
-                    </div>
-                  ) : null}
-                  <AstigmatismFanEngine
-                  key={`${testingEye}-fan-${refractionEngineKey}`}
-                  isDarkMode={isDarkMode}
-                  visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
-                  onComplete={handleAstigmatismComplete}
-                  showInstructions={!isRefractionBattery && !isSnellenTest && !isJaegerTest && testingEye === "left"}
-                />
-                </>
               )}
             </div>
 
@@ -3571,12 +3397,16 @@ export default function TestPage() {
                       color={visionResult?.distance_status === "ok" ? "text-green-500" : "text-red-500"} />
                     <TelemetryRow label="Eye Cover"
                       value={visionResult?.eye_state?.replace(/_/g, " ").toUpperCase() || "---"}
-                      color={visionResult?.eye_state === expectedCover ? "text-green-500" : "text-amber-500"} />
-                    <div className={`pt-3 border-t ${isDarkMode ? "border-slate-800" : "border-slate-200"}`}>
-                      <TelemetryRow label="Mode"
-                        value="MONOCULAR"
-                        color={isDarkMode ? "text-white" : "text-slate-900"} large />
-                    </div>
+                      color={
+                        isExpectedEyeCovered(visionResult?.eye_state, testingEye)
+                          ? "text-green-500"
+                          : "text-amber-500"
+                      } />
+                    {eyePauseCount > 0 && (
+                      <div className={`p-2 rounded-lg text-xs font-medium ${isDarkMode ? "bg-amber-500/10 text-amber-400" : "bg-amber-50 text-amber-700"}`}>
+                        ⏸ Eye-cover pauses: {eyePauseCount}
+                      </div>
+                    )}
                   </>
                 )}
 

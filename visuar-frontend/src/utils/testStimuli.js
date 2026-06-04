@@ -67,6 +67,7 @@ export const SNELLEN_ROWS_FULL = {
   "0.67": ["D", "E", "F", "P", "O", "T"],
   "0.86": ["E", "D", "F", "C", "Z", "P"],
   "1.0": ["F", "E", "L", "O", "P", "Z", "D"],
+  "1.20": ["E", "F", "D", "P", "C", "O", "Z"],
   "1.33": ["P", "E", "Z", "O", "L", "C", "F"],
 };
 
@@ -373,11 +374,6 @@ export function getRefractionRoundLetters(roundIndex, quickMode = false) {
   return parseRow(cfg?.letters || "FPT");
 }
 
-// ─── Astigmatism fan ───────────────────────────────────────────────────────────
-
-export const ASTIGMATISM_FAN_ROUNDS = 1;
-export const ASTIGMATISM_FAN_LINE_COUNT = 12;
-
 const QUICK_MODE_TEST_IDS = new Set(["refraction-battery", "complete", "quick-screener"]);
 
 /**
@@ -512,35 +508,4 @@ export function scoreLetterResponse(expectedText, userTypedText) {
     positionMatches,
     accuracyPercent,
   };
-}
-
-/**
- * Primary axis from selected line angles (degrees, 15° steps).
- * Returns { primaryAxis, uncertain }.
- */
-export function computePrimaryAxis(selectedAngles) {
-  if (!selectedAngles?.length) return { primaryAxis: null, uncertain: true };
-  const angles = [...selectedAngles].map((a) => ((a % 180) + 180) % 180);
-  if (angles.length === 1) {
-    return { primaryAxis: Math.round(angles[0]) % 180, uncertain: false };
-  }
-  const sorted = [...angles].sort((a, b) => a - b);
-  const step = 180 / ASTIGMATISM_FAN_LINE_COUNT;
-  const isAdjacent = (a, b) => {
-    const diff = Math.abs(a - b);
-    return diff <= step + 0.5 || Math.abs(diff - 180) <= step + 0.5;
-  };
-  let adjacent = true;
-  for (let i = 1; i < sorted.length; i++) {
-    if (!isAdjacent(sorted[i - 1], sorted[i])) {
-      adjacent = false;
-      break;
-    }
-  }
-  if (!adjacent) {
-    const first = ((selectedAngles[0] % 180) + 180) % 180;
-    return { primaryAxis: Math.round(first) % 180, uncertain: true };
-  }
-  const primaryAxis = Math.round(sorted.reduce((s, a) => s + a, 0) / sorted.length) % 180;
-  return { primaryAxis, uncertain: false };
 }

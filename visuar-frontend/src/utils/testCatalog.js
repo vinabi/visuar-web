@@ -15,7 +15,6 @@ export const TEST_IDS = {
   REFRACTION_BATTERY: "refraction-battery",
   DUOCHROME: "duochrome-refinement",
   SIMULATOR: "refraction-simulator",
-  ASTIGMATISM: "astigmatism-fan",
   NEAR_FAR: "near-far-switching",
   SUSTAINED: "sustained-focus",
   COMPLETE: "complete",
@@ -27,7 +26,6 @@ export const BARE_EYES_REQUIRED = new Set([
   TEST_IDS.REFRACTION_BATTERY,
   TEST_IDS.DUOCHROME,
   TEST_IDS.SIMULATOR,
-  TEST_IDS.ASTIGMATISM,
 ]);
 
 /** Tests that allow glasses with warning + correctionMode. */
@@ -110,19 +108,9 @@ const ALL_TESTS = [
     planTier: "free",
   },
   {
-    id: TEST_IDS.ASTIGMATISM,
-    title: "Astigmatism Fan",
-    description: "Fan chart for axis, then cross-lines and slider for cylinder (CYL) in 0.25 D steps.",
-    duration: "2 min",
-    badge: "Cylinder and axis",
-    available: true,
-    category: "core",
-    planTier: "free",
-  },
-  {
     id: TEST_IDS.REFRACTION_BATTERY,
     title: "Full Refraction Battery",
-    description: "Distance Eyesight Number, duochrome, simulator, and astigmatism fan combined.",
+    description: "Distance Eyesight Number, duochrome, and refraction simulator combined.",
     duration: "12 min",
     badge: "Recommended",
     available: true,
@@ -182,7 +170,7 @@ const ALL_TESTS = [
   {
     id: TEST_IDS.ORIENTATION,
     title: "Orientation Discrimination",
-    description: "Overlaps with astigmatism fan — available from advanced menu only.",
+    description: "Line orientation sensitivity — available from advanced menu only.",
     duration: "3 min",
     badge: "Advanced",
     available: false,
@@ -216,7 +204,6 @@ const FAR_MAIN = [
   TEST_IDS.LANDOLT,
   TEST_IDS.SIMULATOR,
   TEST_IDS.DUOCHROME,
-  TEST_IDS.ASTIGMATISM,
   TEST_IDS.REFRACTION_BATTERY,
 ];
 const FAR_SUPPORTING = [TEST_IDS.CONTRAST, TEST_IDS.COLOR_VISION];
@@ -226,7 +213,6 @@ const NEAR_MAIN = [
   TEST_IDS.NEAR_FAR,
   TEST_IDS.SIMULATOR,
   TEST_IDS.DUOCHROME,
-  TEST_IDS.ASTIGMATISM,
   TEST_IDS.REFRACTION_BATTERY,
 ];
 const NEAR_SUPPORTING = [
@@ -243,7 +229,6 @@ const BOTH_MAIN = [
   TEST_IDS.LANDOLT,
   TEST_IDS.SIMULATOR,
   TEST_IDS.DUOCHROME,
-  TEST_IDS.ASTIGMATISM,
   TEST_IDS.NEAR_FAR,
 ];
 const BOTH_SUPPORTING = [TEST_IDS.CONTRAST, TEST_IDS.COLOR_VISION];
@@ -260,7 +245,7 @@ function decorateBatteryTitle(test, focus) {
     return {
       ...test,
       title: "Full Near Vision Battery",
-      description: "Near Eyesight Number, near–far switching, simulator, duochrome, and astigmatism fan for near blur.",
+      description: "Near Eyesight Number, near–far switching, simulator, and duochrome for near blur.",
     };
   }
   if (focus === VISION_FOCUS.FAR) {
@@ -268,7 +253,7 @@ function decorateBatteryTitle(test, focus) {
       ...test,
       title: "Full Distance Refraction Battery",
       description:
-        "Distance Eyesight Number, refraction simulator, duochrome, and astigmatism fan for distance blur.",
+        "Distance Eyesight Number, refraction simulator, and duochrome for distance blur.",
     };
   }
   if (focus === VISION_FOCUS.BOTH) {

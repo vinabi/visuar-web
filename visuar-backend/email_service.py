@@ -246,7 +246,6 @@ _TEST_LABELS = {
     "refraction-battery":      "Full Refraction Battery",
     "duochrome-refinement":    "Duochrome Test",
     "refraction-simulator":    "Refraction Simulator",
-    "astigmatism-fan":         "Astigmatism Fan",
     "near-far-switching":      "Near-Far Switching",
     "jaeger-acuity":           "Near Eyesight Number Test",
     "complete":                "Complete Vision Assessment",

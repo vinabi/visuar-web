@@ -73,7 +73,7 @@ const FEATURES = [
     category: "Vision Testing",
   },
   {
-    label: "Refraction & Astigmatism tests",
+    label: "Refraction tests",
     free: true,
     basic: true,
     pro: true,

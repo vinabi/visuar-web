@@ -64,11 +64,6 @@ export function SnellenEngine({
     ? acuityLevels.indexOf(SCREENER_ACUITY_LEVEL)
     : levelIndex;
 
-  const rowLetters = getSnellenRowLetters(effectiveLevel, quickMode);
-  const lettersPerRow = rowLetters.length;
-  const passThreshold = snellenPassThreshold(lettersPerRow);
-  const expectedText = rowLetters.join("");
-
   const [submitted, setSubmitted] = useState(false);
   const [rowScore, setRowScore] = useState(null);
   const [feedback, setFeedback] = useState(null);
@@ -98,6 +93,12 @@ export function SnellenEngine({
     }
     return map;
   }, [chartLevels, quickMode, resetToken]);
+
+  const rowLetters =
+    chartLettersByLevel[effectiveLevel] ?? getSnellenRowLetters(effectiveLevel, quickMode);
+  const lettersPerRow = rowLetters.length;
+  const passThreshold = snellenPassThreshold(lettersPerRow);
+  const expectedText = rowLetters.join("");
 
   const finalizeRow = useCallback(
     ({ letters, expectedText: exp, userTypedText, correctCount, wrongCount, positionMatches, accuracyPercent }) => {

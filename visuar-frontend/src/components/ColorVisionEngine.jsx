@@ -6,7 +6,7 @@ import { EyeRestReminder } from "./EyeRestReminder";
 
 const FEEDBACK_MS = 700;
 
-function Instructions({ isDarkMode, visionOk, onStart }) {
+function Instructions({ isDarkMode, visionOk, coveredEyeLabel, testingEyeLabel, onStart }) {
   const head = isDarkMode ? "text-white" : "text-slate-900";
   const sub  = isDarkMode ? "text-slate-300" : "text-slate-600";
   const dim  = isDarkMode ? "text-slate-500" : "text-slate-400";
@@ -29,9 +29,15 @@ function Instructions({ isDarkMode, visionOk, onStart }) {
       </p>
 
       <ul className={`text-sm text-left mb-7 space-y-2 max-w-sm ${sub}`}>
-        <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">◆</span><span><strong>Both eyes open</strong> — no eye covering needed for this test.</span></li>
+        <li className="flex gap-2">
+          <span className="text-cyan-400 mt-0.5">◆</span>
+          <span>
+            Cover your <strong>{coveredEyeLabel}</strong> eye — we are testing your{" "}
+            <strong>{testingEyeLabel}</strong> eye only.
+          </span>
+        </li>
         <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">◆</span><span><strong>Answer on first impression</strong> — instinct is more accurate than guessing.</span></li>
-        <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">◆</span><span><strong>{TOTAL_PLATES} plates</strong>, increasing difficulty. Tap "Nothing" if you see no number.</span></li>
+        <li className="flex gap-2"><span className="text-cyan-400 mt-0.5">◆</span><span><strong>{TOTAL_PLATES} plates</strong>, increasing difficulty. Tap &quot;Nothing&quot; if you see no number.</span></li>
         <li className={`flex gap-2 ${dim}`}><span className="mt-0.5">◇</span><span>Harder plates score more; missing an easy plate costs the most.</span></li>
       </ul>
 
@@ -49,17 +55,18 @@ function Instructions({ isDarkMode, visionOk, onStart }) {
 }
 
 /**
- * Ishihara-style Colour Vision Test using real SVG plate images.
- *
- * 6 plates ordered by difficulty (Level 1–4).
- * Scoring: difficulty-weighted, asymmetric — easy plate miss = big penalty,
- * hard plate correct = big gain.  CVD risk derived from Level-1 error rate.
- * Binocular — no eye cover required.
+ * Ishihara-style Colour Vision Test — one eye at a time (opposite eye covered).
  */
-export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
+export function ColorVisionEngine({
+  isDarkMode,
+  visionOk,
+  coveredEyeLabel = "RIGHT",
+  testingEyeLabel = "LEFT",
+  onTestComplete,
+}) {
   const [phase, setPhase]       = useState("INSTRUCTIONS");
   const [idx, setIdx]           = useState(0);
-  const [feedback, setFeedback] = useState(null); // null | "correct" | "wrong"
+  const [feedback, setFeedback] = useState(null);
   const [pickedAnswer, setPickedAnswer] = useState(null);
   const [rounds, setRounds]     = useState([]);
   const [isPaused, setIsPaused] = useState(false);
@@ -73,7 +80,6 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
   const levelNames = ["", "Screening", "Moderate", "Hard", "Diagnostic"];
   const levelColors = ["", "text-green-400", "text-yellow-400", "text-orange-400", "text-red-400"];
 
-  // Pause / resume tracking
   useEffect(() => {
     if (phase !== "TESTING") return;
     const nowPaused = !visionOk;
@@ -82,7 +88,6 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
     setIsPaused(nowPaused);
   }, [visionOk, phase]);
 
-  // Reset round timer + image loaded state on each new plate
   useEffect(() => {
     roundStartRef.current = Date.now();
     setImgLoaded(false);
@@ -133,7 +138,15 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
   );
 
   if (phase === "INSTRUCTIONS") {
-    return <Instructions isDarkMode={isDarkMode} visionOk={visionOk} onStart={handleStart} />;
+    return (
+      <Instructions
+        isDarkMode={isDarkMode}
+        visionOk={visionOk}
+        coveredEyeLabel={coveredEyeLabel}
+        testingEyeLabel={testingEyeLabel}
+        onStart={handleStart}
+      />
+    );
   }
 
   if (phase === "TESTING") {
@@ -142,18 +155,32 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
     return (
       <div className="relative flex flex-col items-center justify-center w-full h-full p-4 select-none">
 
-        {/* Pause overlay */}
         {isPaused && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-3xl">
-            <div className="text-center">
+            <div className="text-center px-6 max-w-sm">
               <AlertTriangle className="w-12 h-12 text-amber-400 mx-auto mb-3" />
               <p className="text-xl font-bold text-white">Test Paused</p>
-              <p className="text-sm text-slate-300 mt-1">Return to the correct position to continue</p>
+              <p className="text-sm text-slate-300 mt-2">
+                Cover your <strong>{coveredEyeLabel}</strong> eye. We are testing your{" "}
+                <strong>{testingEyeLabel}</strong> eye only.
+              </p>
+              <p className="text-xs text-slate-400 mt-2">
+                The test resumes when the camera confirms your cover, or use Resume on the main overlay.
+              </p>
             </div>
           </div>
         )}
 
-        {/* Progress bar + labels */}
+        <div
+          className={`mb-3 px-4 py-2 rounded-xl text-sm font-semibold ${
+            isDarkMode
+              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+              : "bg-amber-50 text-amber-700 border border-amber-200"
+          }`}
+        >
+          👁️ Keep your {coveredEyeLabel} eye covered — testing {testingEyeLabel} eye
+        </div>
+
         <div className="flex items-center gap-3 mb-3 w-full max-w-lg">
           <span className={`text-xs font-bold tabular-nums shrink-0 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
             Plate {idx + 1} / {TOTAL_PLATES}
@@ -173,7 +200,6 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
           What number do you see?
         </p>
 
-        {/* Plate image */}
         <div
           className={`rounded-2xl overflow-hidden transition-all duration-100 shadow-lg relative ${
             feedback === "correct"
@@ -184,7 +210,6 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
           }`}
           style={{ width: 340, height: 340, background: isDarkMode ? "#1e293b" : "#f8f8f8" }}
         >
-          {/* Loading skeleton */}
           {!imgLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-10 h-10 rounded-full border-4 border-cyan-500/30 border-t-cyan-500 animate-spin" />
@@ -203,7 +228,6 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
             }}
           />
 
-          {/* Correct / wrong overlay */}
           {feedback && (
             <div
               className={`absolute inset-0 flex items-center justify-center text-6xl font-black ${
@@ -216,7 +240,6 @@ export function ColorVisionEngine({ isDarkMode, visionOk, onTestComplete }) {
           )}
         </div>
 
-        {/* Answer buttons */}
         <div className="flex gap-3 mt-5 flex-wrap justify-center">
           {plate.choices.map((choice) => {
             const isPicked       = pickedAnswer === choice;
