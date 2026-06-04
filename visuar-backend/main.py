@@ -19,7 +19,7 @@ from google import genai as google_genai
 from google.genai import types as google_genai_types
 from schemas import (
     UserCreate, UserResponse, ProfileCreate, ProfileResponse,
-    TestResultCreate, TestResultResponse,
+    TestResultCreate, TestResultResponse, TestResultAIUpdate,
     OnboardingProfileCreate, OnboardingProfileResponse, OnboardingStatusResponse,
     ConversationCreate, ConversationRename, ConversationResponse,
     MessageResponse, ChatResponse, ProfileFieldUpdate,
@@ -28,6 +28,7 @@ from schemas import (
 from crud import (
     create_user, get_user_by_email, get_profile_by_user_id, upsert_profile,
     create_test_result, get_test_results_by_user, get_test_result_by_id_for_user,
+    update_test_result_ai,
     get_onboarding_status, get_onboarding_profile, upsert_onboarding_profile,
     get_user_plan, update_user_plan,
 )
@@ -312,6 +313,11 @@ async def list_test_results(request: Request, db=Depends(get_db)):
 async def get_test_result_by_id(result_id: int, request: Request, db=Depends(get_db)):
     cur = await get_current_user(request, db)
     return await get_test_result_by_id_for_user(db, result_id, cur["db"].id)
+
+@app.patch("/api/test-results/{result_id}/ai", response_model=TestResultResponse)
+async def patch_test_result_ai(result_id: int, payload: TestResultAIUpdate, request: Request, db=Depends(get_db)):
+    cur = await get_current_user(request, db)
+    return await update_test_result_ai(db, result_id, cur["db"].id, payload.ai_findings, payload.ai_recommendations, payload.ai_summary)
 
 # --- AI ANALYSIS ENDPOINT ---
 @app.post("/api/analyze-results")

@@ -126,6 +126,11 @@ class ProfileFieldUpdate(BaseModel):
 
 # ─── Test Results ────────────────────────────────────────
 
+class TestResultAIUpdate(BaseModel):
+    ai_findings: Optional[str] = None
+    ai_recommendations: Optional[str] = None
+    ai_summary: Optional[str] = None
+
 class TestResultCreate(BaseModel):
     test_type: str = "snellen-acuity"
     left_eye_acuity: Optional[str] = None

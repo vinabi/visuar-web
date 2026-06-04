@@ -150,6 +150,10 @@ export function ScreeningResultCards({ estimate, isDarkMode }) {
 export function BilingualAIExplanation({ ai, isDarkMode }) {
   if (!ai) return null;
   const screening = ai.screening || ai;
+  const hasContent = screening.summary_en || screening.summary_ur || ai.summary_ur
+    || screening.safety_note_en || ai.safety_note_en
+    || screening.safety_note_ur || ai.safety_note_ur;
+  if (!hasContent) return null;
 
   return (
     <div className="space-y-6 mt-8">

@@ -12,6 +12,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { usePlan } from "../context/PlanContext";
 
 import { PPICalibrator } from "../components/PPICalibrator";
 import { SnellenEngine } from "../components/SnellenEngine";
@@ -194,6 +195,8 @@ export default function TestPage() {
   const jaegerLevels = getJaegerLevels(quickMode);
   const navigate = useNavigate();
   const { session } = useAuth();
+  const { activePlanId } = usePlan();
+  const isPro = activePlanId === "pro";
 
   const isMobileOrTablet = useIsMobileOrTablet();
 
@@ -741,6 +744,7 @@ export default function TestPage() {
   const finalizeRefractionResults = useCallback(async () => {
     finishingRef.current = true;
     setIsSaving(true);
+    stopCamera();
 
     const visionFocus = getVisionFocus();
     const testMeta = getTestById(testId || "refraction-battery");
@@ -792,6 +796,40 @@ export default function TestPage() {
         testType: tid,
         timestamp: new Date().toISOString(),
       };
+
+      if (session?.access_token && isPro) {
+        try {
+          const astigAiData = await fetchAIAnalysis("astigmatism_fan", {
+            left_cyl: left.cyl ?? 0,
+            left_axis: left.axis ?? null,
+            left_sphere: left.sph ?? null,
+            right_cyl: right.cyl ?? 0,
+            right_axis: right.axis ?? null,
+            right_sphere: right.sph ?? null,
+            vision_focus: visionFocus,
+            correction_mode: correctionMode,
+          });
+          payload.aiAnalysis = astigAiData.aiAnalysis;
+
+          await fetchWithTimeout(`${API_URL}/api/test-results`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              test_type: tid,
+              left_eye_diopter: left.diopter || null,
+              right_eye_diopter: right.diopter || null,
+              overall_score: 0,
+              ai_findings: astigAiData.ai_findings,
+              ai_recommendations: astigAiData.ai_recommendations,
+              ai_summary: astigAiData.ai_summary,
+            }),
+          }, SAVE_RESULTS_TIMEOUT_MS);
+          console.log("[VISUAR] Astigmatism results saved to DB.");
+        } catch (err) {
+          console.error("[VISUAR] Failed to save Astigmatism results:", err);
+        }
+      }
+
       offerResultsWithSessionSummary(`/results/${tid}`, payload);
       return;
     }
@@ -916,7 +954,7 @@ export default function TestPage() {
 
     offerResultsWithSessionSummary(`/results/${tid}`, payload);
 
-    if (session?.access_token) {
+    if (session?.access_token && isPro) {
       try {
         const aiData = await fetchAIAnalysis("screening", buildGeminiScreeningPayload(finalEstimate, {
           refractionResult: {
@@ -932,7 +970,7 @@ export default function TestPage() {
           testsCompleted: finalEstimate.testsUsed || [],
         }));
         payload.aiAnalysis = aiData.aiAnalysis;
-        await fetch(`${API_URL}/api/test-results`, {
+        await fetchWithTimeout(`${API_URL}/api/test-results`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -957,7 +995,7 @@ export default function TestPage() {
             ai_recommendations: aiData.ai_recommendations,
             ai_summary: aiData.ai_summary,
           }),
-        });
+        }, SAVE_RESULTS_TIMEOUT_MS);
         const slug = tid;
         if (slug) persistTestResult(slug, payload);
       } catch (err) {
@@ -1176,42 +1214,7 @@ export default function TestPage() {
       payload.visionFocus = visionFocus;
       payload.diopterDisclaimer = DIOPTER_ESTIMATE_DISCLAIMER;
 
-      const saveBody = {
-        test_type: testId || "snellen-acuity",
-        left_eye_acuity: payload.leftEye?.acuity || null,
-        right_eye_acuity: payload.rightEye?.acuity || null,
-        left_eye_diopter: payload.leftEye?.diopter || null,
-        right_eye_diopter: payload.rightEye?.diopter || null,
-        overall_score: overallScore,
-        ai_findings: null,
-        ai_recommendations: null,
-        ai_summary: null,
-      };
-
-      const saveRes = await fetchWithTimeout(
-        `${API_URL}/api/test-results`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(saveBody),
-        },
-        SAVE_RESULTS_TIMEOUT_MS
-      );
-      if (!saveRes.ok) {
-        const errBody = await saveRes.json().catch(() => ({}));
-        console.error(`[VISUAR] Save failed ${saveRes.status}:`, errBody);
-        alert(`Warning: results could not be saved to your history (${saveRes.status}). Check that you are signed in.`);
-      } else {
-        const saved = await saveRes.json().catch(() => null);
-        if (saved?.id) payload.savedResultId = saved.id;
-        console.log("[VISUAR] Snellen results saved to DB.");
-      }
-
-      // Gemini runs in background — never block the saving overlay on LLM latency
-      fetchAIAnalysis(
+      const snellenAiData = await fetchAIAnalysis(
         "screening",
         buildGeminiScreeningPayload(finalEstimate, {
           overall_score: overallScore,
@@ -1230,11 +1233,40 @@ export default function TestPage() {
             consistencyScore: payload.consistencyScore ?? 100,
           },
         })
-      )
-        .then((aiData) => {
-          payload.aiAnalysis = aiData.aiAnalysis;
-        })
-        .catch(() => {});
+      );
+      payload.aiAnalysis = snellenAiData.aiAnalysis;
+
+      const saveRes = await fetchWithTimeout(
+        `${API_URL}/api/test-results`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            test_type: testId || "snellen-acuity",
+            left_eye_acuity: payload.leftEye?.acuity || null,
+            right_eye_acuity: payload.rightEye?.acuity || null,
+            left_eye_diopter: payload.leftEye?.diopter || null,
+            right_eye_diopter: payload.rightEye?.diopter || null,
+            overall_score: overallScore,
+            ai_findings: snellenAiData.ai_findings,
+            ai_recommendations: snellenAiData.ai_recommendations,
+            ai_summary: snellenAiData.ai_summary,
+          }),
+        },
+        SAVE_RESULTS_TIMEOUT_MS
+      );
+      if (!saveRes.ok) {
+        const errBody = await saveRes.json().catch(() => ({}));
+        console.error(`[VISUAR] Save failed ${saveRes.status}:`, errBody);
+        alert(`Warning: results could not be saved to your history (${saveRes.status}). Check that you are signed in.`);
+      } else {
+        const saved = await saveRes.json().catch(() => null);
+        if (saved?.id) payload.savedResultId = saved.id;
+        console.log("[VISUAR] Snellen results saved to DB.");
+      }
     } catch (err) {
       const isTimeout = err?.name === "AbortError";
       console.error(
@@ -1253,6 +1285,7 @@ export default function TestPage() {
     if (finishingRef.current) return;
     finishingRef.current = true;
     setIsSaving(true);
+    stopCamera();
 
     const leftEye = buildEyeRxFromBuffer("left", "decimal");
     const rightEye = buildEyeRxFromBuffer("right", "decimal");
@@ -1316,6 +1349,7 @@ export default function TestPage() {
   const finalizeStandaloneJaegerResults = useCallback(async () => {
     finishingRef.current = true;
     setIsSaving(true);
+    stopCamera();
     const visionFocus = getVisionFocus();
     const leftEye = enrichJaegerEyePayload("left");
     const rightEye = enrichJaegerEyePayload("right");
@@ -1341,6 +1375,10 @@ export default function TestPage() {
       );
     });
 
+    const leftScore = acuityToScore(leftEye?.acuity);
+    const rightScore = acuityToScore(rightEye?.acuity);
+    const jaegerOverallScore = Math.round((leftScore + rightScore) / 2);
+
     const payload = {
       leftEye,
       rightEye,
@@ -1348,8 +1386,47 @@ export default function TestPage() {
       visionFocus,
       correctionMode,
     };
+
+    if (session?.access_token && isPro) {
+      try {
+        const jaegerAiData = await fetchAIAnalysis("jaeger_acuity", {
+          overall_score: jaegerOverallScore,
+          jaeger_result: {
+            left_acuity: leftEye?.acuity ?? null,
+            left_jaeger: leftEye?.jaegerJ ?? null,
+            left_diopter: leftEye?.diopter ?? null,
+            right_acuity: rightEye?.acuity ?? null,
+            right_jaeger: rightEye?.jaegerJ ?? null,
+            right_diopter: rightEye?.diopter ?? null,
+          },
+          vision_focus: visionFocus,
+          correction_mode: correctionMode,
+        });
+        payload.aiAnalysis = jaegerAiData.aiAnalysis;
+
+        const jaegerSaveRes = await fetchWithTimeout(`${API_URL}/api/test-results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({
+            test_type: "jaeger-acuity",
+            left_eye_acuity: leftEye?.acuity || null,
+            right_eye_acuity: rightEye?.acuity || null,
+            left_eye_diopter: leftEye?.diopter || null,
+            right_eye_diopter: rightEye?.diopter || null,
+            overall_score: jaegerOverallScore,
+            ai_findings: jaegerAiData.ai_findings,
+            ai_recommendations: jaegerAiData.ai_recommendations,
+            ai_summary: jaegerAiData.ai_summary,
+          }),
+        }, SAVE_RESULTS_TIMEOUT_MS);
+        if (jaegerSaveRes.ok) console.log("[VISUAR] Jaeger results saved to DB.");
+      } catch (err) {
+        console.error("[VISUAR] Failed to save Jaeger results:", err);
+      }
+    }
+
     offerResultsWithSessionSummary("/results/jaeger-acuity", payload);
-  }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary]);
+  }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary, session]);
 
   useEffect(() => {
     finalizeSnellenRef.current = finalizeStandaloneSnellenResults;
@@ -1375,6 +1452,7 @@ export default function TestPage() {
   const finalizeCompleteAssessment = useCallback(async () => {
     finishingRef.current = true;
     setIsSaving(true);
+    stopCamera();
     const focus = getVisionFocus();
     const dist = completeResultsRef.current.distance;
     const near = completeResultsRef.current.near;
@@ -1400,7 +1478,7 @@ export default function TestPage() {
       timestamp: new Date().toISOString(),
     };
 
-    if (session?.access_token) {
+    if (session?.access_token && isPro) {
       try {
         const finalEstimate = {
           visionFocus: focus,
@@ -1433,7 +1511,7 @@ export default function TestPage() {
           overall_score: overallScore,
         });
         payload.aiAnalysis = aiData.aiAnalysis;
-        await fetch(`${API_URL}/api/test-results`, {
+        await fetchWithTimeout(`${API_URL}/api/test-results`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1451,7 +1529,7 @@ export default function TestPage() {
             ai_recommendations: aiData.ai_recommendations,
             ai_summary: aiData.ai_summary,
           }),
-        });
+        }, SAVE_RESULTS_TIMEOUT_MS);
       } catch (err) {
         console.error("[VISUAR] Complete assessment save error:", err);
       }
@@ -1528,6 +1606,7 @@ export default function TestPage() {
       if (finishingRef.current) return;
       finishingRef.current = true;
       setIsSaving(true);
+      stopCamera();
 
       contrastEyeResultsRef.current.right = contrastResults;
       const L = contrastEyeResultsRef.current.left || contrastResults;
@@ -1563,7 +1642,7 @@ export default function TestPage() {
       };
 
       let aiAnalysis = { findings: [], recommendations: [], summary: "" };
-      if (session?.access_token) {
+      if (session?.access_token && isPro) {
         try {
           const _contrastAbility = contrastAbilityLabel(overallScore);
           const _contrastReliability = contrastReliabilityLabel({ accuracy: mergedData.accuracy, fatigueLevel: mergedData.fatigueLevel });
@@ -1610,7 +1689,7 @@ export default function TestPage() {
 
           aiAnalysis = aiData.aiAnalysis;
 
-          const saveRes = await fetch(`${API_URL}/api/test-results`, {
+          const saveRes = await fetchWithTimeout(`${API_URL}/api/test-results`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
             body: JSON.stringify({
@@ -1624,17 +1703,15 @@ export default function TestPage() {
               ai_recommendations: aiData.ai_recommendations,
               ai_summary: aiData.ai_summary,
             }),
-          });
+          }, SAVE_RESULTS_TIMEOUT_MS);
           if (!saveRes.ok) {
             const errBody = await saveRes.json().catch(() => ({}));
             console.error(`[VISUAR] Contrast save failed ${saveRes.status}:`, errBody);
-            alert(`Warning: contrast results could not be saved (${saveRes.status}). Check you are signed in and backend is running.`);
           } else {
             console.log("[VISUAR] Contrast results saved to DB.");
           }
         } catch (err) {
           console.error("[VISUAR] Failed to save contrast results:", err);
-          alert("Warning: contrast results could not be saved — backend may be offline.");
         }
       }
       if (isCompleteAssessment) {
@@ -1702,6 +1779,7 @@ export default function TestPage() {
       if (finishingRef.current) return;
       finishingRef.current = true;
       setIsSaving(true);
+      stopCamera();
 
       orientationEyeResultsRef.current.right = orientationResults;
       const L = orientationEyeResultsRef.current.left || orientationResults;
@@ -1731,7 +1809,7 @@ export default function TestPage() {
       };
 
       let aiAnalysis = { findings: [], recommendations: [], summary: "" };
-      if (session?.access_token) {
+      if (session?.access_token && isPro) {
         try {
           const aiData = await fetchAIAnalysis("orientation_discrimination", {
             overall_score: overallScore,
@@ -1746,7 +1824,7 @@ export default function TestPage() {
 
           aiAnalysis = aiData.aiAnalysis;
 
-          const saveRes = await fetch(`${API_URL}/api/test-results`, {
+          const saveRes = await fetchWithTimeout(`${API_URL}/api/test-results`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
             body: JSON.stringify({
@@ -1760,11 +1838,9 @@ export default function TestPage() {
               ai_recommendations: aiData.ai_recommendations,
               ai_summary: aiData.ai_summary,
             }),
-          });
+          }, SAVE_RESULTS_TIMEOUT_MS);
           if (!saveRes.ok) {
-            const errBody = await saveRes.json().catch(() => ({}));
-            console.error(`[VISUAR] Orientation save failed ${saveRes.status}:`, errBody);
-            alert(`Warning: orientation results could not be saved (${saveRes.status}). Check you are signed in and backend is running.`);
+            console.error(`[VISUAR] Orientation save failed ${saveRes.status}`);
           } else {
             console.log("[VISUAR] Orientation results saved to DB.");
           }
@@ -1795,9 +1871,10 @@ export default function TestPage() {
       if (finishingRef.current) return;
       finishingRef.current = true;
       setIsSaving(true);
+      stopCamera();
 
       let aiAnalysis = { findings: [], recommendations: [], summary: "" };
-      if (session?.access_token) {
+      if (session?.access_token && isPro) {
         try {
           const aiData = await fetchAIAnalysis("color_vision", {
             overall_score: results.score,
@@ -1810,7 +1887,7 @@ export default function TestPage() {
           });
           aiAnalysis = aiData.aiAnalysis;
 
-          const saveRes = await fetch(`${API_URL}/api/test-results`, {
+          const saveRes = await fetchWithTimeout(`${API_URL}/api/test-results`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
             body: JSON.stringify({
@@ -1824,7 +1901,7 @@ export default function TestPage() {
               ai_recommendations: aiData.ai_recommendations,
               ai_summary: aiData.ai_summary,
             }),
-          });
+          }, SAVE_RESULTS_TIMEOUT_MS);
           if (!saveRes.ok) {
             const errBody = await saveRes.json().catch(() => ({}));
             console.error(`[VISUAR] Color vision save failed ${saveRes.status}:`, errBody);
@@ -1858,6 +1935,7 @@ export default function TestPage() {
       if (finishingRef.current) return;
       finishingRef.current = true;
       setIsSaving(true);
+      stopCamera();
 
       landoltEyeResultsRef.current.right = landoltResults;
       const L = landoltEyeResultsRef.current.left || landoltResults;
@@ -1900,7 +1978,7 @@ export default function TestPage() {
       };
 
       let aiAnalysis = { findings: [], recommendations: [], summary: "" };
-      if (session?.access_token) {
+      if (session?.access_token && isPro) {
         try {
           const aiData = await fetchAIAnalysis("landolt_acuity", {
             overall_score: overallScore,
@@ -1985,6 +2063,7 @@ export default function TestPage() {
       if (finishingRef.current) return;
       finishingRef.current = true;
       setIsSaving(true);
+      stopCamera();
 
       rapidEyeResultsRef.current.right = rapidResults;
       const L = rapidEyeResultsRef.current.left || rapidResults;
@@ -2017,7 +2096,7 @@ export default function TestPage() {
       };
 
       let aiAnalysis = { findings: [], recommendations: [], summary: "" };
-      if (session?.access_token) {
+      if (session?.access_token && isPro) {
         try {
           const aiData = await fetchAIAnalysis("rapid_recognition", {
             overall_score: overallScore,
@@ -2033,7 +2112,7 @@ export default function TestPage() {
 
           aiAnalysis = aiData.aiAnalysis;
 
-          const saveRes = await fetch(`${API_URL}/api/test-results`, {
+          const saveRes = await fetchWithTimeout(`${API_URL}/api/test-results`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
             body: JSON.stringify({
@@ -2047,11 +2126,9 @@ export default function TestPage() {
               ai_recommendations: aiData.ai_recommendations,
               ai_summary: aiData.ai_summary,
             }),
-          });
+          }, SAVE_RESULTS_TIMEOUT_MS);
           if (!saveRes.ok) {
-            const errBody = await saveRes.json().catch(() => ({}));
-            console.error(`[VISUAR] Rapid save failed ${saveRes.status}:`, errBody);
-            alert(`Warning: rapid recognition results could not be saved (${saveRes.status}). Check you are signed in and backend is running.`);
+            console.error(`[VISUAR] Rapid save failed ${saveRes.status}`);
           } else {
             console.log("[VISUAR] Rapid recognition results saved to DB.");
           }
@@ -2149,6 +2226,7 @@ export default function TestPage() {
       } else {
         finishingRef.current = true;
         setIsSaving(true);
+        stopCamera();
 
         // Build full metrics from accumulated letter timings
         const allTimings = snellenLetterTimingsRef.current;
@@ -2310,6 +2388,7 @@ export default function TestPage() {
       } else {
         finishingRef.current = true;
         setIsSaving(true);
+        stopCamera();
         const visionFocus = getVisionFocus();
         ["left", "right"].forEach((eye) => {
           const eyeData = resultsRef.current[eye];
@@ -2392,7 +2471,7 @@ export default function TestPage() {
   );
 
   const handleNearFarComplete = useCallback(
-    (data) => {
+    async (data) => {
       if (isAssessmentFlow) {
         if (isCompleteAssessment) completeResultsRef.current.nearFar = data;
         advanceAssessmentStep();
@@ -2409,9 +2488,44 @@ export default function TestPage() {
         setRefractionEngineKey((k) => k + 1);
         return;
       }
+      if (finishingRef.current) return;
+      finishingRef.current = true;
+      setIsSaving(true);
+      stopCamera();
+
+      const nearFarScore = data.nearFarScore ?? 70;
+      let aiAnalysis = { findings: [], recommendations: [], summary: "" };
+      if (session?.access_token && isPro) {
+        try {
+          const nfAiData = await fetchAIAnalysis("near_far_switching", {
+            overall_score: nearFarScore,
+            rounds_passed: data.roundsPassed ?? 0,
+            total_rounds: data.totalRounds ?? 4,
+            focus_quality: data.focusQuality ?? null,
+            switch_accuracy: data.switchAccuracy ?? null,
+          });
+          aiAnalysis = nfAiData.aiAnalysis;
+
+          await fetchWithTimeout(`${API_URL}/api/test-results`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              test_type: "near-far-switching",
+              overall_score: nearFarScore,
+              ai_findings: nfAiData.ai_findings,
+              ai_recommendations: nfAiData.ai_recommendations,
+              ai_summary: nfAiData.ai_summary,
+            }),
+          }, SAVE_RESULTS_TIMEOUT_MS);
+          console.log("[VISUAR] Near-Far results saved to DB.");
+        } catch (err) {
+          console.error("[VISUAR] Failed to save Near-Far results:", err);
+        }
+      }
+
       stopCamera();
       navigate("/results/near-far-switching", {
-        state: { nearFarData: data, timestamp: new Date().toISOString() },
+        state: { nearFarData: { ...data, aiAnalysis }, aiAnalysis, timestamp: new Date().toISOString() },
       });
     },
     [
@@ -2422,6 +2536,7 @@ export default function TestPage() {
       advanceAssessmentStep,
       navigate,
       stopCamera,
+      session,
     ]
   );
 

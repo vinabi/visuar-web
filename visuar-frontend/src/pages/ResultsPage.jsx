@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useParams, useLocation } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   ArrowLeft, Download, Share2, CheckCircle2,
   AlertTriangle, Info, TrendingUp, Eye, Activity, Sparkles, Loader2,
@@ -11,6 +11,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { usePlan } from "../context/PlanContext";
 import { scoreLabel, scoreHex } from "../utils/metricsEngine";
 import { formatPrescription } from "../utils/refractionMath";
 import { DIOPTER_ESTIMATE_DISCLAIMER } from "../utils/diopterEstimate";
@@ -258,7 +259,10 @@ export default function ResultsPage() {
   const { isDarkMode } = useTheme();
   const { testId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const { session } = useAuth();
+  const { activePlanId } = usePlan();
+  const isPro = activePlanId === "pro";
   const resultState = location.state;
   const persistedState = !resultState && testId ? loadPersistedTestResult(testId) : null;
 
@@ -266,6 +270,8 @@ export default function ResultsPage() {
   const isNumericId = testId && /^\d+$/.test(testId);
   const [fetchedRecord, setFetchedRecord] = useState(null);
   const [fetchLoading, setFetchLoading] = useState(false);
+  const [rerunAiData, setRerunAiData] = useState(null);
+  const [aiRerunLoading, setAiRerunLoading] = useState(false);
 
   useEffect(() => {
     if (resultState || persistedState) return;
@@ -354,6 +360,28 @@ export default function ResultsPage() {
     aiAnalysis: fetchedAI,
   } : null;
 
+  const dbJaegerData = fromDB && isJaegerTest ? {
+    leftEye: {
+      acuity: fetchedRecord.left_eye_acuity,
+      diopter: fetchedRecord.left_eye_diopter,
+      sph: fetchedRecord.left_eye_diopter,
+    },
+    rightEye: {
+      acuity: fetchedRecord.right_eye_acuity,
+      diopter: fetchedRecord.right_eye_diopter,
+      sph: fetchedRecord.right_eye_diopter,
+    },
+    overallScore: fetchedRecord.overall_score,
+    timestamp: fetchedRecord.created_at,
+    aiAnalysis: fetchedAI,
+  } : null;
+
+  const dbNearFarData = fromDB && isNearFarTest ? {
+    nearFarScore: fetchedRecord.overall_score,
+    roundsPassed: 0, totalRounds: 4,
+    aiAnalysis: fetchedAI,
+  } : null;
+
   const dbLandoltParsed = fromDB && isLandoltTest && fetchedRecord.result_json
     ? parseSafe(fetchedRecord.result_json, null)
     : null;
@@ -433,12 +461,144 @@ export default function ResultsPage() {
   const colorVisionData = resultState?.colorVisionData || dbColorVisionData;
   const landoltData = resultState?.landoltData || dbLandoltData;
   const rapidData = resultState?.rapidData || dbRapidData;
+  const jaegerData = resultState?.leftEye ? resultState : dbJaegerData;
+  const nearFarData = resultState?.nearFarData || dbNearFarData;
 
-  // ── AI analysis (state → DB → empty) ────────────────────
-  const aiAnalysis = contrastData?.aiAnalysis || orientationData?.aiAnalysis
+  // ── AI analysis (state → rerun → DB → empty) ───────────────
+  const aiAnalysis = rerunAiData
+    || contrastData?.aiAnalysis || orientationData?.aiAnalysis
     || colorVisionData?.aiAnalysis || landoltData?.aiAnalysis || rapidData?.aiAnalysis || refractionData?.aiAnalysis
+    || jaegerData?.aiAnalysis || nearFarData?.aiAnalysis
     || resultState?.aiAnalysis || fetchedAI || { findings: [], recommendations: [], summary: "" };
   const aiLoading = fetchLoading;
+
+  const hasDbAI = fromDB && (
+    (fetchedRecord?.ai_summary?.trim()?.length > 0) ||
+    (parseSafe(fetchedRecord?.ai_findings, []).length > 0)
+  );
+
+  const buildRerunPayload = (record) => {
+    const type = record.test_type;
+    let parsed = null;
+    if (record.result_json) { try { parsed = JSON.parse(record.result_json); } catch {} }
+
+    // Extract only essential clinical fields — never spread bulk round arrays
+    const leftEye = { sphereD: record.left_eye_diopter, acuity: record.left_eye_acuity };
+    const rightEye = { sphereD: record.right_eye_diopter, acuity: record.right_eye_acuity };
+    const fe = parsed?.finalEstimate || {};
+
+    switch (type) {
+      // Never use screening_explanation for re-runs — legacy mode is simpler and more reliable
+      // when we only have the basic DB fields available
+      case "snellen-acuity":
+        return { test_type: type, overall_score: record.overall_score,
+          left_eye_acuity: record.left_eye_acuity, right_eye_acuity: record.right_eye_acuity,
+          left_eye_diopter: record.left_eye_diopter, right_eye_diopter: record.right_eye_diopter };
+
+      case "jaeger-acuity":
+        return { test_type: type, overall_score: record.overall_score,
+          left_acuity: record.left_eye_acuity, right_acuity: record.right_eye_acuity,
+          left_diopter: record.left_eye_diopter, right_diopter: record.right_eye_diopter };
+
+      case "color-vision":
+        return { test_type: type, overall_score: record.overall_score,
+          cvd_risk: parsed?.cvdRisk || null, cvd_type: parsed?.cvdType || null };
+
+      case "contrast-sensitivity":
+        return { test_type: "contrast_sensitivity", overall_score: record.overall_score };
+
+      case "orientation-discrimination":
+        return { test_type: type, overall_score: record.overall_score };
+
+      case "rapid-recognition":
+        return { test_type: type, overall_score: record.overall_score };
+
+      case "landolt-acuity":
+        return { test_type: type, overall_score: record.overall_score,
+          left_eye_acuity: record.left_eye_acuity, right_eye_acuity: record.right_eye_acuity };
+
+      case "near-far-switching":
+        return { test_type: type, overall_score: record.overall_score };
+
+      case "astigmatism-fan":
+        return { test_type: type, overall_score: record.overall_score,
+          left_eye_diopter: record.left_eye_diopter, right_eye_diopter: record.right_eye_diopter };
+
+      case "refraction-battery":
+      case "duochrome-refinement":
+      case "refraction-simulator":
+        return { test_type: type, overall_score: record.overall_score,
+          left_eye_acuity: record.left_eye_acuity, right_eye_acuity: record.right_eye_acuity,
+          left_eye_diopter: record.left_eye_diopter, right_eye_diopter: record.right_eye_diopter,
+          left_cyl: fe.leftEye?.cylinderD ?? null, right_cyl: fe.rightEye?.cylinderD ?? null,
+          left_axis: fe.leftEye?.axis ?? null, right_axis: fe.rightEye?.axis ?? null };
+
+      default:
+        return { test_type: type, overall_score: record.overall_score,
+          left_eye_acuity: record.left_eye_acuity, right_eye_acuity: record.right_eye_acuity,
+          left_eye_diopter: record.left_eye_diopter, right_eye_diopter: record.right_eye_diopter };
+    }
+  };
+
+  const handleRerunAI = async () => {
+    if (!session?.access_token || !fetchedRecord) return;
+    setAiRerunLoading(true);
+    try {
+      const payload = buildRerunPayload(fetchedRecord);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 25000);
+      let res;
+      try {
+        res = await fetch(`${API_URL}/api/analyze-results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+
+      if (!res.ok) {
+        console.error("[ResultsPage] Re-run AI: API returned", res.status);
+        return;
+      }
+      const ai = await res.json();
+      const findings = ai.findings || [];
+      const summary = ai.summary || "";
+      if (!findings.length && !summary) {
+        console.warn("[ResultsPage] Re-run AI: API returned empty data. Backend error:", ai.error || "none");
+        console.log("[ResultsPage] Payload sent:", JSON.stringify(payload));
+        console.log("[ResultsPage] Response received:", JSON.stringify(ai));
+        return;
+      }
+      const newAi = {
+        findings,
+        recommendations: ai.recommendations || [],
+        summary,
+        summary_ur: ai.summary_ur || "",
+        safety_note_en: ai.safety_note_en,
+        safety_note_ur: ai.safety_note_ur,
+        screening: ai.screening,
+      };
+      setRerunAiData(newAi);
+
+      fetch(`${API_URL}/api/test-results/${fetchedRecord.id}/ai`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          ai_findings: JSON.stringify(findings),
+          ai_recommendations: JSON.stringify(ai.recommendations || []),
+          ai_summary: summary,
+        }),
+      }).catch(() => {});
+    } catch (err) {
+      console.error("[ResultsPage] Re-run AI error:", err);
+    } finally {
+      setAiRerunLoading(false);
+    }
+  };
 
   // ── Effective result state for Snellen ───────────────────
   const effectiveResultState = resultState || persistedState || dbSnellenState;
@@ -511,6 +671,105 @@ export default function ResultsPage() {
           <LevelDots levelProgression={levelProgression} maxLevel={maxLevel} isDarkMode={isDarkMode} />
         </div>
       </div>
+    );
+  }
+
+  function AIAnalysisBlock({ findings, recommendations }) {
+    // Non-pro users see a blurred preview with an upgrade prompt
+    if (!isPro) {
+      return (
+        <div className="relative mb-6">
+          {/* Blurred preview of findings */}
+          <div className="blur-sm pointer-events-none select-none">
+            <div className={`rounded-2xl p-6 mb-4 border ${isDarkMode ? "bg-slate-800/40 border-slate-700/40" : "bg-slate-50 border-slate-200"}`}>
+              <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}>Key Findings</h3>
+              {[1, 2, 3].map((i) => (
+                <div key={i} className={`h-16 rounded-xl mb-3 ${isDarkMode ? "bg-slate-700/50" : "bg-slate-200"}`} />
+              ))}
+            </div>
+            <div className={`rounded-2xl p-6 border ${isDarkMode ? "bg-gradient-to-br from-blue-500/8 to-cyan-500/8 border-blue-500/20" : "bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-100"}`}>
+              <h3 className={`text-lg font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}>Recommendations</h3>
+              {[1, 2].map((i) => (
+                <div key={i} className={`h-8 rounded-xl mb-3 ${isDarkMode ? "bg-slate-700/50" : "bg-slate-200"}`} />
+              ))}
+            </div>
+          </div>
+          {/* Upgrade overlay */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 rounded-2xl backdrop-blur-sm bg-white/60 dark:bg-slate-900/60">
+            <Sparkles className={`w-10 h-10 ${isDarkMode ? "text-purple-400" : "text-purple-500"}`} />
+            <div className="text-center px-6">
+              <p className={`text-lg font-bold mb-1 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                AI Analysis is a Pro Feature
+              </p>
+              <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                Upgrade to Pro to unlock AI-powered findings, recommendations, and summaries for every test.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate("/pricing")}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold bg-gradient-to-r from-purple-500 to-cyan-500 text-white shadow-lg hover:shadow-purple-500/30 transition-all hover:scale-105"
+            >
+              <Sparkles className="w-4 h-4" />
+              Upgrade to Pro
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (fromDB && !hasDbAI && !rerunAiData) {
+      return (
+        <div className={`rounded-2xl p-6 mb-6 border text-center ${isDarkMode ? "bg-slate-800/40 border-slate-700/40" : "bg-slate-50 border-slate-200"}`}>
+          {aiRerunLoading ? (
+            <div className="flex items-center justify-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-purple-400" />
+              <span className={`text-sm ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>Generating AI analysis…</span>
+            </div>
+          ) : (
+            <>
+              <p className={`text-sm mb-3 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                No AI analysis stored for this result.
+              </p>
+              <button
+                onClick={handleRerunAI}
+                className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-colors ${
+                  isDarkMode
+                    ? "bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30"
+                    : "bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200"
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                Generate AI Analysis
+              </button>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <FindingsSection findings={findings} recommendations={recommendations} />
+        <BilingualAIExplanation ai={rerunAiData || aiAnalysis} isDarkMode={isDarkMode} />
+        {fromDB && (
+          <div className="flex justify-end mb-4">
+            <button
+              onClick={handleRerunAI}
+              disabled={aiRerunLoading}
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-colors ${
+                isDarkMode
+                  ? "bg-purple-500/15 hover:bg-purple-500/25 text-purple-400 border border-purple-500/25 disabled:opacity-40"
+                  : "bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-200 disabled:opacity-40"
+              }`}
+            >
+              {aiRerunLoading
+                ? <><Loader2 className="w-3 h-3 animate-spin" /> Regenerating…</>
+                : <><Sparkles className="w-3 h-3" /> Re-run AI Analysis</>
+              }
+            </button>
+          </div>
+        )}
+      </>
     );
   }
 
@@ -743,7 +1002,7 @@ export default function ResultsPage() {
           accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
@@ -849,7 +1108,7 @@ export default function ResultsPage() {
           pauseCount={pauseCount} accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
@@ -957,7 +1216,7 @@ export default function ResultsPage() {
           pauseCount={pauseCount} accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
@@ -1090,7 +1349,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
@@ -1203,7 +1462,7 @@ export default function ResultsPage() {
           pauseCount={pauseCount} accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
@@ -1286,8 +1545,7 @@ export default function ResultsPage() {
           </div>
         </div>
         <ScreeningResultCards estimate={finalEstimate} isDarkMode={isDarkMode} />
-        <FindingsSection findings={findings} recommendations={recs} />
-        <BilingualAIExplanation ai={aiAnalysis} isDarkMode={isDarkMode} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
@@ -1355,16 +1613,16 @@ export default function ResultsPage() {
             </div>
           </div>
         </div>
-        <FindingsSection findings={findings} recommendations={recs} />
+        <AIAnalysisBlock findings={findings} recommendations={recs} />
       </ResultsShell>
     );
   }
 
   // ── Jaeger near acuity ───────────────────────────────────
-  if (isJaegerTest && resultState?.leftEye) {
+  if (isJaegerTest && jaegerData?.leftEye) {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
-    const le = resultState.leftEye;
-    const re = resultState.rightEye;
+    const le = jaegerData.leftEye;
+    const re = jaegerData.rightEye;
     const formatJaegerEye = (eye) => {
       if (!eye?.acuity) return { main: "—", sub: "" };
       const main = eye.jaegerJ || eye.acuity;
@@ -1397,12 +1655,12 @@ export default function ResultsPage() {
           </div>
         </div>
         <TestPrescriptionCard
-          leftEye={resultState.leftEye}
-          rightEye={resultState.rightEye}
+          leftEye={jaegerData.leftEye}
+          rightEye={jaegerData.rightEye}
           isDarkMode={isDarkMode}
           title="Estimated prescription from this test"
         />
-        <FindingsSection
+        <AIAnalysisBlock
           findings={[
             {
               type: "info",
@@ -1418,8 +1676,8 @@ export default function ResultsPage() {
   }
 
   // ── Near–far switching ───────────────────────────────────
-  if (isNearFarTest && resultState?.nearFarData) {
-    const nf = resultState.nearFarData;
+  if (isNearFarTest && nearFarData) {
+    const nf = nearFarData;
     return (
       <ResultsShell title={testTitles["near-far-switching"]} date={dateStr} isDarkMode={isDarkMode}>
         <div className={`rounded-2xl p-6 mb-6 text-center ${isDarkMode ? "bg-slate-800/40" : "bg-slate-50"}`}>
@@ -1428,7 +1686,7 @@ export default function ResultsPage() {
             {nf.roundsPassed ?? 0} of {nf.totalRounds ?? 4} distance switches passed
           </p>
         </div>
-        <FindingsSection
+        <AIAnalysisBlock
           findings={[{ type: "info", title: "Accommodation exercise", description: "This test samples your ability to read lines after shifting between near and far viewing distances." }]}
           recommendations={["Practice smooth focus changes when moving between screen and distant objects.", "If switching feels slow or blurry, mention it at your next eye exam."]}
         />
@@ -1550,7 +1808,7 @@ export default function ResultsPage() {
             </Button>
           </Link>
         </div>
-        <FindingsSection findings={snellenFindings} recommendations={snellenRecs} />
+        <AIAnalysisBlock findings={snellenFindings} recommendations={snellenRecs} />
       </ResultsShell>
     );
   }
@@ -1632,7 +1890,7 @@ export default function ResultsPage() {
       {snellenData?.finalEstimate && (
         <ScreeningResultCards estimate={snellenData.finalEstimate} isDarkMode={isDarkMode} />
       )}
-      <FindingsSection findings={snellenFindings} recommendations={snellenRecs} />
+      <AIAnalysisBlock findings={snellenFindings} recommendations={snellenRecs} />
       <BilingualAIExplanation ai={aiAnalysis} isDarkMode={isDarkMode} />
     </ResultsShell>
   );

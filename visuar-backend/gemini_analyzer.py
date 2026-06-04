@@ -3,10 +3,11 @@ import json
 from google import genai
 from google.genai import types
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    print("[GEMINI] Warning: GEMINI_API_KEY not set — analysis will fail until configured.")
-client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
+def _get_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    return genai.Client(api_key=api_key)
 
 SCREENING_SYSTEM = """\
 You are VISUAR, a vision screening assistant. You ONLY explain values provided in the input JSON.
@@ -95,7 +96,16 @@ def _parse_json_response(text: str) -> dict:
         text = parts[1] if len(parts) > 1 else text
         if text.startswith("json"):
             text = text[4:]
-    return json.loads(text.strip())
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Gemini sometimes wraps JSON in extra text — find the first { } block
+        import re
+        match = re.search(r'\{[\s\S]*\}', text)
+        if match:
+            return json.loads(match.group())
+        raise
 
 
 def _normalize_screening_to_legacy(screening: dict) -> dict:
@@ -139,6 +149,7 @@ def analyze_test_results(test_data: dict) -> dict:
     Call Gemini to explain vision test results. Uses screening prompt when
     finalEstimate or screening_explanation flag is present.
     """
+    client = _get_client()
     if not client:
         return {
             "findings": [],

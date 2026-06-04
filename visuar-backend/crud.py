@@ -142,3 +142,19 @@ async def get_test_result_by_id_for_user(db: AsyncSession, result_id: int, user_
     if not row:
         raise HTTPException(status_code=404, detail="Test result not found")
     return TestResultResponse.from_orm(row)
+
+async def update_test_result_ai(db: AsyncSession, result_id: int, user_id: int, ai_findings: str, ai_recommendations: str, ai_summary: str) -> TestResultResponse:
+    result = await db.execute(select(TestResult).filter_by(id=result_id, user_id=user_id))
+    row = result.scalars().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Test result not found")
+    row.ai_findings = ai_findings
+    row.ai_recommendations = ai_recommendations
+    row.ai_summary = ai_summary
+    try:
+        await db.commit()
+        await db.refresh(row)
+        return TestResultResponse.from_orm(row)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
