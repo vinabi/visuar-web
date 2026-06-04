@@ -24,6 +24,9 @@ export const JAEGER_MAX_PX = 36;
 /** Screener row (moderate difficulty). */
 export const SCREENER_ACUITY_LEVEL = "0.33";
 
+/** Near screener row — middle of the quick near ladder (N8). */
+export const SCREENER_JAEGER_LEVEL = "N8";
+
 /** @param {string|string[]} row */
 function parseRow(row) {
   if (Array.isArray(row)) return row.map((c) => String(c).toUpperCase());
@@ -372,6 +375,42 @@ export function getRefractionRoundLetters(roundIndex, quickMode = false) {
   const rounds = getRefractionRounds(quickMode);
   const cfg = rounds[Math.min(roundIndex, rounds.length - 1)];
   return parseRow(cfg?.letters || "FPT");
+}
+
+// ─── Astigmatism fan ───────────────────────────────────────────────────────────
+
+export const ASTIGMATISM_FAN_ROUNDS = 1;
+export const ASTIGMATISM_FAN_LINE_COUNT = 12;
+
+/**
+ * Primary axis from selected line angles (degrees, 15° steps).
+ * @returns {{ primaryAxis: number|null, uncertain: boolean }}
+ */
+export function computePrimaryAxis(selectedAngles) {
+  if (!selectedAngles?.length) return { primaryAxis: null, uncertain: true };
+  const angles = [...selectedAngles].map((a) => ((a % 180) + 180) % 180);
+  if (angles.length === 1) {
+    return { primaryAxis: Math.round(angles[0]) % 180, uncertain: false };
+  }
+  const sorted = [...angles].sort((a, b) => a - b);
+  const step = 180 / ASTIGMATISM_FAN_LINE_COUNT;
+  const isAdjacent = (a, b) => {
+    const diff = Math.abs(a - b);
+    return diff <= step + 0.5 || Math.abs(diff - 180) <= step + 0.5;
+  };
+  let adjacent = true;
+  for (let i = 1; i < sorted.length; i++) {
+    if (!isAdjacent(sorted[i - 1], sorted[i])) {
+      adjacent = false;
+      break;
+    }
+  }
+  if (!adjacent) {
+    const first = ((selectedAngles[0] % 180) + 180) % 180;
+    return { primaryAxis: Math.round(first) % 180, uncertain: true };
+  }
+  const primaryAxis = Math.round(sorted.reduce((s, a) => s + a, 0) / sorted.length) % 180;
+  return { primaryAxis, uncertain: false };
 }
 
 const QUICK_MODE_TEST_IDS = new Set(["refraction-battery", "complete", "quick-screener"]);

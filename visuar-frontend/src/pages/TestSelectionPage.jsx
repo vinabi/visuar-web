@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Lock, Crown, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,7 @@ import {
   getUnsureBrowseSections,
   getRecommendedAssessmentPath,
   getRecommendedAssessmentLabel,
+  getBlurScreenerPath,
   SAFETY_COPY,
   TEST_IDS,
   planUnlocksTest,
@@ -35,7 +36,7 @@ function badgeStyles(test, isDarkMode) {
   return isDarkMode ? "bg-violet-500/20 text-violet-300" : "bg-violet-100 text-violet-700";
 }
 
-function TestCard({ test, isDarkMode, locked, requiredPlan }) {
+function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus }) {
   if (!test.available && !locked) {
     return (
       <div
@@ -98,9 +99,14 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
     );
   }
 
+  const testTo =
+    test.id === TEST_IDS.BLUR_SCREENER && visionFocus
+      ? getBlurScreenerPath(visionFocus)
+      : `/test/${test.id}`;
+
   return (
     <Link
-      to={`/test/${test.id}`}
+      to={testTo}
       className={`group backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all ${
         isDarkMode
           ? "bg-[#1a1f3a]/80 border border-slate-700/50 hover:border-cyan-400/50"
@@ -136,7 +142,7 @@ function TestCard({ test, isDarkMode, locked, requiredPlan }) {
   );
 }
 
-function TestGrid({ tests, isDarkMode, activePlanId }) {
+function TestGrid({ tests, isDarkMode, activePlanId, visionFocus }) {
   if (!tests.length) return null;
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
@@ -149,6 +155,7 @@ function TestGrid({ tests, isDarkMode, activePlanId }) {
             isDarkMode={isDarkMode}
             locked={locked}
             requiredPlan={test.planTier}
+            visionFocus={visionFocus}
           />
         );
       })}
@@ -160,6 +167,7 @@ export default function TestSelectionPage() {
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const { activePlanId } = usePlan();
+  const navigate = useNavigate();
   const [phase, setPhase] = useState(
     sessionStorage.getItem("visuar_focus_confirmed") ? "tests" : "focus"
   );
@@ -178,6 +186,10 @@ export default function TestSelectionPage() {
     setVisionFocus(focusDraft);
     setSessionVisionFocus(focusDraft);
     sessionStorage.setItem("visuar_focus_confirmed", "1");
+    if (focusDraft === VISION_FOCUS.UNSURE || focusDraft === VISION_FOCUS.BOTH) {
+      navigate(getBlurScreenerPath(focusDraft));
+      return;
+    }
     setPhase("tests");
   };
 
@@ -249,21 +261,23 @@ export default function TestSelectionPage() {
               </button>
             </div>
 
-            {focus === VISION_FOCUS.UNSURE && (
+            {(focus === VISION_FOCUS.UNSURE || focus === VISION_FOCUS.BOTH) && (
               <div
                 className={`mb-8 p-6 rounded-2xl text-center ${
                   isDarkMode ? "bg-cyan-500/10 border border-cyan-500/20" : "bg-cyan-50 border border-cyan-100"
                 }`}
               >
                 <p className={`mb-4 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-                  Start with one medium-distance acuity check and one near reading check. We will
-                  recommend distance, near, or complete tests based on your screening result.
+                  {focus === VISION_FOCUS.UNSURE
+                    ? "We'll quickly check both distance and near clarity, then recommend the right tests."
+                    : "Short distance and near checks will show whether to focus on far vision, near vision, or a full check."}
                 </p>
-                <Link to={`/test/${TEST_IDS.QUICK_SCREENER}`}>
-                  <Button className="rounded-full bg-cyan-500 text-white px-8">
-                    Start Quick Screener
-                  </Button>
-                </Link>
+                <Button
+                  className="rounded-full bg-cyan-500 text-white px-8"
+                  onClick={() => navigate(getBlurScreenerPath(focus))}
+                >
+                  Start Blur Screener
+                </Button>
               </div>
             )}
 
@@ -274,7 +288,12 @@ export default function TestSelectionPage() {
                 >
                   {focus === VISION_FOCUS.UNSURE ? "Screener" : "Recommended Tests"}
                 </h2>
-                <TestGrid tests={mainTests} isDarkMode={isDarkMode} activePlanId={activePlanId} />
+                <TestGrid
+                  tests={mainTests}
+                  isDarkMode={isDarkMode}
+                  activePlanId={activePlanId}
+                  visionFocus={focus}
+                />
               </>
             )}
 
@@ -289,6 +308,7 @@ export default function TestSelectionPage() {
                   tests={supportingTests}
                   isDarkMode={isDarkMode}
                   activePlanId={activePlanId}
+                  visionFocus={focus}
                 />
               </>
             )}
@@ -326,6 +346,7 @@ export default function TestSelectionPage() {
                       tests={section.mainTests}
                       isDarkMode={isDarkMode}
                       activePlanId={activePlanId}
+                      visionFocus={focus}
                     />
                     {section.supportingTests.length > 0 && (
                       <>
@@ -340,6 +361,7 @@ export default function TestSelectionPage() {
                           tests={section.supportingTests}
                           isDarkMode={isDarkMode}
                           activePlanId={activePlanId}
+                          visionFocus={focus}
                         />
                       </>
                     )}
@@ -348,7 +370,7 @@ export default function TestSelectionPage() {
               </div>
             )}
 
-            {focus !== VISION_FOCUS.UNSURE && (
+            {focus !== VISION_FOCUS.UNSURE && focus !== VISION_FOCUS.BOTH && (
               <div className="text-center">
                 <Link to={recommendedPath}>
                   <Button

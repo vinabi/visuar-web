@@ -19,6 +19,7 @@ export const TEST_IDS = {
   SUSTAINED: "sustained-focus",
   COMPLETE: "complete",
   QUICK_SCREENER: "quick-screener",
+  BLUR_SCREENER: "blur-screener",
 };
 
 /** Tests that require bare eyes (block if glasses detected). */
@@ -139,6 +140,16 @@ const ALL_TESTS = [
     planTier: "free",
   },
   {
+    id: TEST_IDS.BLUR_SCREENER,
+    title: "Blur Screener",
+    description: "Short distance and near clarity checks to route you to the right follow-up tests.",
+    duration: "3 min",
+    badge: "Screener",
+    available: true,
+    category: "core",
+    planTier: "free",
+  },
+  {
     id: TEST_IDS.COLOR_VISION,
     title: "Colour Vision Test",
     description: "14-plate Ishihara-style procedural test — screens for red-green colour deficiency across 4 difficulty levels.",
@@ -235,7 +246,8 @@ const BOTH_MAIN = [
 ];
 const BOTH_SUPPORTING = [TEST_IDS.CONTRAST, TEST_IDS.COLOR_VISION];
 
-const UNSURE_SCREENER = [TEST_IDS.QUICK_SCREENER];
+const UNSURE_SCREENER = [TEST_IDS.BLUR_SCREENER];
+const BOTH_SCREENER = [TEST_IDS.BLUR_SCREENER];
 
 export function getTestById(id) {
   return ALL_TESTS.find((t) => t.id === id);
@@ -282,7 +294,7 @@ export function getTestsForFocus(focus) {
   const map = {
     [VISION_FOCUS.FAR]: { main: FAR_MAIN, supporting: FAR_SUPPORTING },
     [VISION_FOCUS.NEAR]: { main: NEAR_MAIN, supporting: NEAR_SUPPORTING },
-    [VISION_FOCUS.BOTH]: { main: BOTH_MAIN, supporting: BOTH_SUPPORTING },
+    [VISION_FOCUS.BOTH]: { main: BOTH_SCREENER, supporting: BOTH_SUPPORTING },
     [VISION_FOCUS.UNSURE]: { main: UNSURE_SCREENER, supporting: [] },
   };
   const cfg = map[focus] || map[VISION_FOCUS.BOTH];
@@ -322,15 +334,30 @@ export function allowsGlassesWithWarning(testId) {
   return GLASSES_ALLOWED_WITH_WARNING.has(testId);
 }
 
+/** Maps vision focus to blur screener entry reason (both | unsure). */
+export function getBlurEntryReasonForFocus(focus) {
+  if (focus === VISION_FOCUS.BOTH) return "both";
+  return "unsure";
+}
+
+export function getBlurScreenerPath(focus) {
+  return {
+    pathname: `/test/${TEST_IDS.BLUR_SCREENER}`,
+    state: { blurEntryReason: getBlurEntryReasonForFocus(focus) },
+  };
+}
+
 export function getRecommendedAssessmentPath(focus) {
-  if (focus === VISION_FOCUS.UNSURE) return `/test/${TEST_IDS.QUICK_SCREENER}`;
-  if (focus === VISION_FOCUS.BOTH) return `/test/${TEST_IDS.COMPLETE}`;
+  if (focus === VISION_FOCUS.UNSURE || focus === VISION_FOCUS.BOTH) {
+    return `/test/${TEST_IDS.BLUR_SCREENER}`;
+  }
   return `/test/${TEST_IDS.REFRACTION_BATTERY}`;
 }
 
 export function getRecommendedAssessmentLabel(focus) {
-  if (focus === VISION_FOCUS.UNSURE) return "Start Quick Screener";
-  if (focus === VISION_FOCUS.BOTH) return "Start Complete Vision Assessment";
+  if (focus === VISION_FOCUS.UNSURE || focus === VISION_FOCUS.BOTH) {
+    return "Start Blur Screener";
+  }
   if (focus === VISION_FOCUS.NEAR) return "Start Full Near Vision Battery";
   return "Start Full Distance Refraction Battery";
 }

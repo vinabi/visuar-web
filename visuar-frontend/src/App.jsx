@@ -10,6 +10,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AIConsultPage from "./pages/AIConsultPage";
 import TestSelectionPage from "./pages/TestSelectionPage";
 import TestPage from "./pages/TestPage";
+import BlurScreenerPage from "./pages/BlurScreenerPage";
 import ResultsPage from "./pages/ResultsPage";
 import TermsAndConditionsPage from "./pages/TermsAndConditionsPage";
 import FAQPage from "./pages/FAQPage";
@@ -93,6 +94,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <TestSelectionPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/test/blur-screener"
+              element={
+                <ProtectedRoute>
+                  <BlurScreenerPage />
                 </ProtectedRoute>
               }
             />

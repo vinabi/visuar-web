@@ -1,11 +1,15 @@
 import { getStepLabel } from "../utils/visionFocus";
 
-export function AssessmentProgress({ plan, currentIndex, isDarkMode }) {
+export function AssessmentProgress({ plan, currentIndex, isDarkMode, variant = "complete" }) {
   if (!plan?.length) return null;
+  const heading =
+    variant === "quick-screener"
+      ? `Quick screener · Step ${currentIndex + 1} of ${plan.length}`
+      : `Complete assessment · Step ${currentIndex + 1} of ${plan.length}`;
   return (
     <div className={`w-full px-4 py-3 border-b ${isDarkMode ? "border-slate-800 bg-slate-900/50" : "border-slate-100 bg-slate-50"}`}>
       <p className={`text-[10px] font-bold uppercase tracking-wider mb-2 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-        Complete assessment · Step {currentIndex + 1} of {plan.length}
+        {heading}
       </p>
       <div className="flex flex-wrap gap-1.5">
         {plan.map((step, i) => (

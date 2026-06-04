@@ -4,6 +4,7 @@ import { getJaegerDisplaySize, getBrowserZoomWarning } from "../utils/visionScal
 import { VIEWING_DISTANCE, TEST_DISTANCE_CM } from "../utils/viewingDistance";
 import {
   NEAR_TEXT_LEVELS,
+  SCREENER_JAEGER_LEVEL,
   getJaegerRowLetters,
   snellenPassThreshold,
 } from "../utils/testStimuli";
@@ -78,8 +79,10 @@ export function JaegerEngine({
   quickMode = false,
   jaegerLevels = JAEGER_LEVELS,
 }) {
-  const effectiveLevel = screenerMode ? "N8" : jaegerLevel;
-  const effectiveIndex = screenerMode ? jaegerLevels.indexOf("N8") : levelIndex;
+  const effectiveLevel = screenerMode ? SCREENER_JAEGER_LEVEL : jaegerLevel;
+  const effectiveIndex = screenerMode
+    ? Math.max(0, jaegerLevels.indexOf(SCREENER_JAEGER_LEVEL))
+    : levelIndex;
   const rowLetters = getJaegerRowLetters(effectiveLevel, quickMode);
   const lettersPerRow = rowLetters.length;
   const passThreshold = snellenPassThreshold(lettersPerRow);
@@ -186,7 +189,7 @@ export function JaegerEngine({
 
       <div className="w-full max-h-[42vh] overflow-y-auto mb-3 pr-1 rounded-xl border border-transparent">
         <div className="w-full space-y-0.5">
-          {(screenerMode ? ["N8"] : jaegerLevels).map((level) => {
+          {(screenerMode ? [SCREENER_JAEGER_LEVEL] : jaegerLevels).map((level) => {
             const letters = getJaegerRowLetters(level, quickMode);
             const isActive = level === effectiveLevel;
             return (

@@ -60,9 +60,9 @@ export function getPostScreenerRecommendation(focus) {
   return titles[focus] || titles[VISION_FOCUS.BOTH];
 }
 
-/** Short screener only — distance row, near line, optional contrast. */
+/** Short screener — one distance row and one near row (no full contrast battery). */
 export function buildQuickScreenerPlan() {
-  return [STEP.SCREENER_SNELLEN, STEP.SCREENER_JAEGER, STEP.CONTRAST];
+  return [STEP.SCREENER_SNELLEN, STEP.SCREENER_JAEGER];
 }
 
 function farTrack() {

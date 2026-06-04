@@ -31,7 +31,9 @@ import {
   buildAssessmentPlan,
   buildQuickScreenerPlan,
   resolveFocusAfterScreener,
+  getPostScreenerRecommendation,
   getStepViewingMode,
+  VISION_FOCUS_LABELS,
 } from "../utils/visionFocus";
 import { OrientationEngine } from "../components/OrientationEngine";
 import { LandoltCEngine } from "../components/LandoltCEngine";
@@ -39,6 +41,7 @@ import { ColorVisionEngine } from "../components/ColorVisionEngine";
 import { RapidRecognitionEngine } from "../components/RapidRecognitionEngine";
 import { DuochromeEngine } from "../components/DuochromeEngine";
 import { RefractionSimulatorEngine } from "../components/RefractionSimulatorEngine";
+import { AstigmatismFanEngine } from "../components/AstigmatismFanEngine";
 import { RefractionBatteryProgress } from "../components/RefractionBatteryProgress";
 import { EyeCoverGuide } from "../components/vision/EyeCoverGuide";
 import { EyeRestReminder } from "../components/EyeRestReminder";
@@ -65,7 +68,7 @@ import {
   CONFIDENCE,
 } from "../utils/finalEstimate";
 import { SessionEstimatePanel } from "../components/SessionEstimatePanel";
-import { getTestById } from "../utils/testCatalog";
+import { getTestById, getRecommendedAssessmentPath } from "../utils/testCatalog";
 import {
   getSnellenLevels,
   getJaegerLevels,
@@ -190,6 +193,10 @@ export default function TestPage() {
   // ─── Master State ────────────────────────────────────
   const [testPhase, setTestPhase] = useState(() => {
     if (testId === "complete") return "VISION_FOCUS";
+    if (testId === "quick-screener") {
+      const saved = localStorage.getItem("visuar_ppi");
+      return saved ? "QUICK_INTRO" : "SETUP_PPI";
+    }
     const saved = localStorage.getItem("visuar_ppi");
     return saved ? "SETUP_CAMERA" : "SETUP_PPI";
   });
@@ -212,6 +219,7 @@ export default function TestPage() {
     nearFar: null,
   });
   const screenerRef = useRef({ snellenPassed: null, jaegerPassed: null });
+  const [screenerOutcome, setScreenerOutcome] = useState(null);
   const activeAssessmentStep = assessmentPlan[assessmentStepIndex] || null;
   const isScreenerStep =
     activeAssessmentStep === STEP.SCREENER_SNELLEN ||
@@ -329,6 +337,7 @@ export default function TestPage() {
     isDuochromeTest || (isRefractionBattery && refractionSubPhase === "duochrome");
   const showSimulatorEngine =
     isRefractionSimulatorTest || (isRefractionBattery && refractionSubPhase === "simulator");
+  const showAstigmatismEngine = isSnellenTest && snellenSubPhase === "astigmatism";
   // Pre-check lock
   const lockStartRef = useRef(null);
   const [lockProgress, setLockProgress] = useState(0);
@@ -346,6 +355,17 @@ export default function TestPage() {
   useEffect(() => {
     testingEyeRef.current = testingEye;
   }, [testingEye]);
+
+  useEffect(() => {
+    if (!isQuickScreener) return;
+    startNewScreeningSession({ visionFocus: VISION_FOCUS.UNSURE });
+    setVisionFocus(VISION_FOCUS.UNSURE);
+    setSessionVisionFocus(VISION_FOCUS.UNSURE);
+    screenerRef.current = { snellenPassed: null, jaegerPassed: null };
+    setScreenerOutcome(null);
+    setAssessmentPlan(buildQuickScreenerPlan());
+    setAssessmentStepIndex(0);
+  }, [isQuickScreener]);
 
   useEffect(() => {
     if (!isColorVisionTest) return;
@@ -683,6 +703,17 @@ export default function TestPage() {
       axis: buf.axis,
       forceNear: unit === "jaeger",
     });
+  }, []);
+
+  const beginAstigmatismPhase = useCallback((setSubPhase) => {
+    setSubPhase("astigmatism");
+    setTestingEye("left");
+    testingEyeRef.current = "left";
+    setRefractionEngineKey((k) => k + 1);
+    finishingRef.current = false;
+    setIsSaving(false);
+    levelResultFiredRef.current = false;
+    setTestPhase("INSTRUCTION");
   }, []);
 
   const offerResultsWithSessionSummary = useCallback(
@@ -1414,6 +1445,37 @@ export default function TestPage() {
     );
   }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary, runPostTestAI]);
 
+  const finalizeSnellenRef = useRef(null);
+
+  const handleAstigmatismComplete = useCallback(
+    (result) => {
+      const eye = testingEyeRef.current;
+      refractionBufferRef.current[eye] = {
+        ...refractionBufferRef.current[eye],
+        cyl: result.cyl,
+        axis: result.axis,
+        allEqual: result.allEqual === true,
+      };
+
+      if (isSnellenTest && snellenSubPhase === "astigmatism") {
+        if (eye === "left") {
+          testingEyeRef.current = "right";
+          setTestingEye("right");
+          setRefractionEngineKey((k) => k + 1);
+          setTestPhase("INSTRUCTION");
+          return;
+        }
+        finalizeSnellenRef.current?.();
+        return;
+      }
+    },
+    [isSnellenTest, snellenSubPhase]
+  );
+
+  useEffect(() => {
+    finalizeSnellenRef.current = finalizeStandaloneSnellenResults;
+  }, [finalizeStandaloneSnellenResults]);
+
   const resetForNextAssessmentStep = useCallback(() => {
     setTestingEye("left");
     setCurrentLevelIndex(0);
@@ -1524,30 +1586,32 @@ export default function TestPage() {
   }, [session, navigate, stopCamera, correctionMode, runPostTestAI]);
 
   const finishQuickScreenerRouting = useCallback(() => {
-    const resolved = resolveFocusAfterScreener({
-      snellenPassed: screenerRef.current.snellenPassed,
-      jaegerPassed: screenerRef.current.jaegerPassed,
-    });
+    const snellenPassed = screenerRef.current.snellenPassed;
+    const jaegerPassed = screenerRef.current.jaegerPassed;
+    const resolved = resolveFocusAfterScreener({ snellenPassed, jaegerPassed });
     setVisionFocus(resolved);
     setSessionVisionFocus(resolved);
     sessionStorage.setItem("visuar_focus_confirmed", "1");
+    setScreenerOutcome({
+      resolvedFocus: resolved,
+      snellenPassed,
+      jaegerPassed,
+      recommendation: getPostScreenerRecommendation(resolved),
+      nextPath: getRecommendedAssessmentPath(resolved),
+    });
     stopCamera();
-    navigate("/test-selection");
-  }, [navigate, stopCamera]);
+    setTestPhase("SCREENER_COMPLETE");
+  }, [stopCamera]);
 
   const advanceAssessmentStep = useCallback(() => {
     const step = assessmentPlan[assessmentStepIndex];
+
+    if (isQuickScreener && step === STEP.SCREENER_JAEGER) {
+      finishQuickScreenerRouting();
+      return;
+    }
+
     if (step === STEP.SCREENER_JAEGER && getVisionFocus() === VISION_FOCUS.UNSURE) {
-      if (isQuickScreener) {
-        const next = assessmentStepIndex + 1;
-        if (next < assessmentPlan.length && assessmentPlan[next] === STEP.CONTRAST) {
-          setAssessmentStepIndex(next);
-          resetForNextAssessmentStep();
-          return;
-        }
-        finishQuickScreenerRouting();
-        return;
-      }
       const resolved = resolveFocusAfterScreener({
         snellenPassed: screenerRef.current.snellenPassed,
         jaegerPassed: screenerRef.current.jaegerPassed,
@@ -1562,6 +1626,10 @@ export default function TestPage() {
 
     const next = assessmentStepIndex + 1;
     if (next >= assessmentPlan.length) {
+      if (isQuickScreener) {
+        finishQuickScreenerRouting();
+        return;
+      }
       finalizeCompleteAssessment();
       return;
     }
@@ -2235,7 +2303,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        void finalizeStandaloneSnellenResults();
+        beginAstigmatismPhase(setSnellenSubPhase);
         return;
       }
 
@@ -2309,7 +2377,7 @@ export default function TestPage() {
       isCompleteAssessment,
       activeAssessmentStep,
       advanceAssessmentStep,
-      finalizeStandaloneSnellenResults,
+      beginAstigmatismPhase,
     ]
   );
 
@@ -2925,6 +2993,101 @@ export default function TestPage() {
           </div>
         )}
 
+        {/* ═══ PHASE: QUICK SCREENER INTRO ═══ */}
+        {isImplemented && isQuickScreener && testPhase === "QUICK_INTRO" && (
+          <div
+            className={`backdrop-blur-md rounded-3xl shadow-xl p-8 md:p-10 text-center transition-colors ${
+              isDarkMode
+                ? "bg-[#1a1f3a]/80 border border-slate-700/50"
+                : "bg-white/80 border border-white/40"
+            }`}
+          >
+            <h2 className={`text-3xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              Quick Vision Screener
+            </h2>
+            <p className={`max-w-lg mx-auto mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              Two short checks — one distance row and one near row — to recommend whether to focus on
+              distance, near, or complete vision tests next. About 2–3 minutes with your webcam.
+            </p>
+            <ol
+              className={`max-w-md mx-auto text-left text-sm space-y-2 mb-8 ${
+                isDarkMode ? "text-slate-300" : "text-slate-700"
+              }`}
+            >
+              <li>1. Calibrate screen distance with your camera</li>
+              <li>2. Read one distance letter row (cover one eye)</li>
+              <li>3. Read one near row at reading distance</li>
+            </ol>
+            <Button
+              className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-10 h-12"
+              onClick={() => setTestPhase("SETUP_CAMERA")}
+            >
+              Continue
+            </Button>
+          </div>
+        )}
+
+        {/* ═══ PHASE: SCREENER COMPLETE ═══ */}
+        {isImplemented && isQuickScreener && testPhase === "SCREENER_COMPLETE" && screenerOutcome && (
+          <div
+            className={`backdrop-blur-md rounded-3xl shadow-xl p-8 md:p-10 transition-colors ${
+              isDarkMode
+                ? "bg-[#1a1f3a]/80 border border-slate-700/50"
+                : "bg-white/80 border border-white/40"
+            }`}
+          >
+            <div className="flex items-center justify-center mb-4">
+              <CheckCircle2 className={`w-12 h-12 ${isDarkMode ? "text-green-400" : "text-green-600"}`} />
+            </div>
+            <h2 className={`text-3xl font-bold text-center mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              Screener complete
+            </h2>
+            <p className={`text-center mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              {VISION_FOCUS_LABELS[screenerOutcome.resolvedFocus] || "Screening finished"}
+            </p>
+            <div
+              className={`max-w-md mx-auto rounded-2xl p-4 mb-6 space-y-2 text-sm ${
+                isDarkMode ? "bg-slate-800/80 border border-slate-700" : "bg-slate-50 border border-slate-200"
+              }`}
+            >
+              <p>
+                <strong>Distance screener:</strong>{" "}
+                {screenerOutcome.snellenPassed === null
+                  ? "—"
+                  : screenerOutcome.snellenPassed
+                    ? "Passed"
+                    : "Needs follow-up"}
+              </p>
+              <p>
+                <strong>Near screener:</strong>{" "}
+                {screenerOutcome.jaegerPassed === null
+                  ? "—"
+                  : screenerOutcome.jaegerPassed
+                    ? "Passed"
+                    : "Needs follow-up"}
+              </p>
+            </div>
+            <p className={`text-center font-semibold mb-6 ${isDarkMode ? "text-cyan-300" : "text-cyan-700"}`}>
+              Recommended next: {screenerOutcome.recommendation}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <Button
+                className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8 h-12"
+                onClick={() => navigate(screenerOutcome.nextPath)}
+              >
+                Start recommended tests
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full px-8 h-12"
+                onClick={() => navigate("/test-selection")}
+              >
+                Browse all tests
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* ═══ PHASE: VISION FOCUS ═══ */}
         {isImplemented && testPhase === "VISION_FOCUS" && (
           <div
@@ -2961,7 +3124,7 @@ export default function TestPage() {
               onCalibrate={(val) => {
                 localStorage.setItem("visuar_ppi", String(val));
                 setPpi(val);
-                setTestPhase("SETUP_CAMERA");
+                setTestPhase(isQuickScreener ? "QUICK_INTRO" : "SETUP_CAMERA");
               }}
               isDarkMode={isDarkMode}
             />
@@ -3217,6 +3380,7 @@ export default function TestPage() {
                   plan={assessmentPlan}
                   currentIndex={assessmentStepIndex}
                   isDarkMode={isDarkMode}
+                  variant={isQuickScreener ? "quick-screener" : "complete"}
                 />
               )}
               {isRefractionBattery && testPhase === "TESTING" && (
@@ -3345,6 +3509,26 @@ export default function TestPage() {
                   showInstructions={!isRefractionBattery}
                   quickMode={quickMode}
                 />
+              )}
+              {showAstigmatismEngine && (
+                <>
+                  <div
+                    className={`mb-3 px-4 py-2 rounded-xl text-sm font-semibold text-center ${
+                      isDarkMode
+                        ? "bg-violet-500/10 text-violet-300 border border-violet-500/30"
+                        : "bg-violet-50 text-violet-800 border border-violet-200"
+                    }`}
+                  >
+                    Astigmatism fan — tap every line that looks sharpest or darkest (tap again to deselect)
+                  </div>
+                  <AstigmatismFanEngine
+                    key={`${testingEye}-fan-${refractionEngineKey}`}
+                    isDarkMode={isDarkMode}
+                    visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
+                    onComplete={handleAstigmatismComplete}
+                    showInstructions={testingEye === "left"}
+                  />
+                </>
               )}
             </div>
 
