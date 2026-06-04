@@ -563,7 +563,10 @@ export default function ResultsPage() {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
     const displayFindings = aiAnalysis?.findings?.length > 0 ? aiAnalysis.findings : findings;
     const displayRecs = aiAnalysis?.recommendations?.length > 0 ? aiAnalysis.recommendations : recommendations;
-    const aiSummary = aiAnalysis?.summary;
+    const aiSummary = aiAnalysis?.summary || aiAnalysis?.screening?.summary_en;
+    // Only skeleton when AI is still fetching AND there is nothing to show yet
+    const showFindingsSkeleton = aiFetchLoading && displayFindings.length === 0;
+    const showRecsSkeleton = aiFetchLoading && displayRecs.length === 0;
 
     return (
       <>
@@ -588,23 +591,27 @@ export default function ResultsPage() {
           <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
             <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
             Key Findings
-            {aiLoading && <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" />}
-            {!aiLoading && aiAnalysis?.findings?.length > 0 && (
+            {showFindingsSkeleton && <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" />}
+            {!showFindingsSkeleton && aiAnalysis?.findings?.length > 0 && (
               <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
                 AI
               </span>
             )}
           </h3>
-          {aiLoading ? (
+          {showFindingsSkeleton ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
                 <div key={i} className={`h-16 rounded-xl animate-pulse ${isDarkMode ? "bg-slate-700/50" : "bg-slate-100"}`} />
               ))}
             </div>
-          ) : (
+          ) : displayFindings.length > 0 ? (
             <div className="space-y-3">
               {displayFindings.map((f, i) => <FindingCard key={i} f={f} isDarkMode={isDarkMode} />)}
             </div>
+          ) : (
+            <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+              No additional findings for this test.
+            </p>
           )}
         </div>
 
@@ -612,19 +619,19 @@ export default function ResultsPage() {
           <h3 className={`text-lg font-bold mb-4 flex items-center gap-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
             <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
             Recommendations
-            {!aiLoading && aiAnalysis?.recommendations?.length > 0 && (
+            {!showRecsSkeleton && aiAnalysis?.recommendations?.length > 0 && (
               <span className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
                 AI
               </span>
             )}
           </h3>
-          {aiLoading ? (
+          {showRecsSkeleton ? (
             <div className="space-y-3">
               {[1, 2].map((i) => (
                 <div key={i} className={`h-10 rounded-xl animate-pulse ${isDarkMode ? "bg-slate-700/50" : "bg-slate-100"}`} />
               ))}
             </div>
-          ) : (
+          ) : displayRecs.length > 0 ? (
             <div className="space-y-3">
               {displayRecs.map((rec, i) => (
                 <div key={i} className="flex gap-3">
@@ -635,6 +642,10 @@ export default function ResultsPage() {
                 </div>
               ))}
             </div>
+          ) : (
+            <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+              Recommendations will appear when AI analysis completes.
+            </p>
           )}
         </div>
 

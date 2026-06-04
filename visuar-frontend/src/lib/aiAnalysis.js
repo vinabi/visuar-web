@@ -19,12 +19,41 @@ export const emptyAiAnalysis = () => ({
 export function mapApiResponseToAiAnalysis(ai) {
   if (!ai || ai.error) return emptyAiAnalysis();
   const screening = ai.screening || {};
+  const summary =
+    ai.summary ||
+    screening.summary_en ||
+    "";
+  const summaryUr = ai.summary_ur || screening.summary_ur || "";
+  let findings = ai.findings || [];
+  let recommendations = ai.recommendations || screening.recommendations_en || [];
+
+  // Build findings from screening blocks if legacy list is empty
+  if (!findings.length && screening.findings?.length) {
+    findings = screening.findings.map((f) => ({
+      type: f.type || "info",
+      title: f.title || "",
+      description: f.description_en || f.description || "",
+      description_ur: f.description_ur || "",
+    }));
+  }
+  if (!recommendations.length && screening.recommendations_en?.length) {
+    recommendations = screening.recommendations_en;
+  }
+  if (!findings.length && screening.units_explained_en) {
+    findings.push({
+      type: "info",
+      title: "What the units mean",
+      description: screening.units_explained_en,
+      description_ur: screening.units_explained_ur || "",
+    });
+  }
+
   return {
-    findings: ai.findings || [],
-    recommendations: ai.recommendations || [],
+    findings,
+    recommendations,
     recommendations_ur: ai.recommendations_ur || screening.recommendations_ur || [],
-    summary: ai.summary || "",
-    summary_ur: ai.summary_ur || "",
+    summary,
+    summary_ur: summaryUr,
     screening,
     safety_note_en: ai.safety_note_en || screening.safety_note_en || "",
     safety_note_ur: ai.safety_note_ur || screening.safety_note_ur || "",
