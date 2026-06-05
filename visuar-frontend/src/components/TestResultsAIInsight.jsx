@@ -83,7 +83,7 @@ export function TestResultsAIInsight({ ai, isDarkMode, loading }) {
       )}
 
       {summaryUr && (
-        <div dir="rtl" className="text-right">
+        <div>
           <p className={`text-xs font-semibold uppercase mb-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
             اردو
           </p>
@@ -105,7 +105,7 @@ export function TestResultsAIInsight({ ai, isDarkMode, loading }) {
             accent={isDarkMode ? "text-green-400" : "text-green-600"}
           />
           {doUr.length > 0 && (
-            <div dir="rtl" className="text-right mt-3">
+            <div className="mt-3">
               <BulletList
                 items={doUr}
                 isDarkMode={isDarkMode}
@@ -129,7 +129,7 @@ export function TestResultsAIInsight({ ai, isDarkMode, loading }) {
             accent={isDarkMode ? "text-amber-400" : "text-amber-600"}
           />
           {avoidUr.length > 0 && (
-            <div dir="rtl" className="text-right mt-3">
+            <div className="mt-3">
               <BulletList
                 items={avoidUr}
                 isDarkMode={isDarkMode}
@@ -156,8 +156,7 @@ export function TestResultsAIInsight({ ai, isDarkMode, loading }) {
           </p>
           {nutritionUr && (
             <p
-              dir="rtl"
-              className={`text-sm leading-relaxed mt-2 text-right ${
+              className={`text-sm leading-relaxed mt-2 ${
                 isDarkMode ? "text-slate-400" : "text-slate-600"
               }`}
             >
@@ -171,7 +170,7 @@ export function TestResultsAIInsight({ ai, isDarkMode, loading }) {
         <p className={`text-xs italic leading-relaxed ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
           {safetyEn}
           {safetyUr && (
-            <span dir="rtl" className="block text-right mt-2">
+            <span className="block mt-2">
               {safetyUr}
             </span>
           )}

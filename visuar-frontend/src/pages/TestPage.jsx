@@ -803,7 +803,7 @@ export default function TestPage() {
 
     try {
     const visionFocus = getVisionFocus();
-    const testMeta = getTestById(testId);
+    const testMeta = getTestById(testId, t);
     const tid = testId;
     let left;
     let right;
@@ -936,7 +936,7 @@ export default function TestPage() {
     setIsSaving(true);
 
     const visionFocus = getVisionFocus();
-    const testMeta = getTestById(testId || "refraction-battery");
+    const testMeta = getTestById(testId || "refraction-battery", t);
     const tid = testId || "refraction-battery";
 
     const left = buildEyePrescription({
@@ -2795,7 +2795,7 @@ export default function TestPage() {
         isDarkMode ? "bg-[#0a0e27]" : "bg-gradient-to-br from-blue-50 via-cyan-50 to-white"
       }`}>
         <AnimatedBackground isDarkMode={isDarkMode} />
-        <div className="absolute top-6 right-6 z-20"><LanguageSelector /></div>
+        <div className="absolute top-6 right-6 z-20"><LanguageSelector isDarkMode={isDarkMode} /></div>
 
         <div className="flex-1 flex items-center justify-center p-6 relative z-10">
           <div className={`w-full max-w-md rounded-3xl shadow-2xl p-8 text-center transition-colors ${
@@ -3091,7 +3091,7 @@ export default function TestPage() {
         {/* ═══ PHASE: VISION FOCUS ═══ */}
         {isImplemented && testPhase === "VISION_FOCUS" && (
           <div
-            className={`backdrop-blur-md rounded-3xl shadow-xl p-8 md:p-10 transition-colors ${
+            className={`backdrop-blur-md rounded-3xl shadow-xl p-8 md:p-10 transition-colors overflow-visible ${
               isDarkMode
                 ? "bg-[#1a1f3a]/80 border border-slate-700/50"
                 : "bg-white/80 border border-white/40"

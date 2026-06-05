@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { loadStripe } from "@stripe/stripe-js";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import {
@@ -17,141 +18,28 @@ import {
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { useTheme } from "../context/ThemeContext";
 import { usePlan, PLANS } from "../context/PlanContext";
+import {
+  buildPricingFeatures,
+  buildPlanCardFeatures,
+  planDisplayName,
+  planMessagesLabel,
+} from "../utils/pricingFeatures";
+import { LanguageSelector } from "@/components/LanguageSelector";
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
-// ── Feature definitions (source of truth) ────────────────────────────────────
-// value: true = included, false = not included, string = custom label
-const FEATURES = [
-  {
-    label: "AI messages / conversation",
-    free: "5 messages",
-    basic: "50 messages",
-    pro: "Unlimited",
-    category: "AI Consultant",
-  },
-  {
-    label: "AI profile-aware responses",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "AI Consultant",
-  },
-  {
-    label: "Voice input (mic recording)",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "AI Consultant",
-  },
-  {
-    label: "AI text-to-speech replies",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "AI Consultant",
-  },
-  {
-    label: "Priority AI responses",
-    free: false,
-    basic: true,
-    pro: true,
-    category: "AI Consultant",
-  },
-  {
-    label: "All vision tests",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "Vision Testing",
-  },
-  {
-    label: "Distance Eyesight Number & Contrast tests",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "Vision Testing",
-  },
-  {
-    label: "Refraction tests",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "Vision Testing",
-  },
-  {
-    label: "Full Refraction Battery",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "Vision Testing",
-  },
-  {
-    label: "Test history on dashboard",
-    free: "Last 3 results",
-    basic: "All results",
-    pro: "All results",
-    category: "Results & Reports",
-  },
-  {
-    label: "PDF health report download",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "Results & Reports",
-  },
-  {
-    label: "AI findings & recommendations",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "Results & Reports",
-  },
-  {
-    label: "Advanced health analytics",
-    free: false,
-    basic: false,
-    pro: true,
-    category: "Results & Reports",
-  },
-  {
-    label: "Multi-language support (EN / UR)",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "General",
-  },
-  {
-    label: "Health profile management",
-    free: true,
-    basic: true,
-    pro: true,
-    category: "General",
-  },
-  {
-    label: "Cancel anytime",
-    free: false,
-    basic: true,
-    pro: true,
-    category: "General",
-  },
-];
-
-const CATEGORIES = [...new Set(FEATURES.map((f) => f.category))];
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function FeatureValue({ value, isDarkMode, planId }) {
+function FeatureValue({ value, isDarkMode, planId, lastThreeLabel }) {
   if (value === true) {
     return <Check className="w-4 h-4 text-emerald-500 mx-auto" />;
   }
   if (value === false) {
     return <X className={`w-4 h-4 mx-auto ${isDarkMode ? "text-slate-600" : "text-slate-300"}`} />;
   }
-  // string
   const highlight =
-    (planId === "pro") ||
-    (planId === "basic" && value !== "Last 3 results");
+    planId === "pro" ||
+    (planId === "basic" && value !== lastThreeLabel);
   return (
     <span className={`text-xs font-semibold ${
       highlight
@@ -165,7 +53,7 @@ function FeatureValue({ value, isDarkMode, planId }) {
 
 // ── Card payment form ─────────────────────────────────────────────────────────
 
-function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
+function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode, t }) {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -207,7 +95,7 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
     try {
       await onSuccess(paymentMethod.id);
     } catch {
-      setCardError("Could not activate plan — check backend connection and try again.");
+      setCardError(t("pricing.activateError"));
       setProcessing(false);
     }
   };
@@ -217,10 +105,10 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
       <div className="flex items-center gap-2 mb-1">
         <CreditCard className="w-4 h-4 text-cyan-500" />
         <span className={`text-sm font-semibold ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-          Card details
+          {t("pricing.cardDetails")}
         </span>
         <span className={`ml-auto text-xs flex items-center gap-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-          <Lock className="w-3 h-3" /> Secured by Stripe
+          <Lock className="w-3 h-3" /> {t("pricing.securedStripe")}
         </span>
       </div>
 
@@ -243,7 +131,7 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
       )}
 
       <p className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-        Test card: <span className="font-mono font-semibold">4242 4242 4242 4242</span> · any future date · any CVC
+        {t("pricing.testCardHint")}
       </p>
 
       <div className="flex gap-3 pt-1">
@@ -255,7 +143,7 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
             isDarkMode ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
           } disabled:opacity-50`}
         >
-          Cancel
+          {t("pricing.cancel")}
         </button>
         <button
           type="submit"
@@ -263,9 +151,9 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
           className="flex-1 rounded-xl py-3 text-sm font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
         >
           {processing ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Processing…</>
+            <><Loader2 className="w-4 h-4 animate-spin" /> {t("pricing.processing")}</>
           ) : (
-            <><Lock className="w-3.5 h-3.5" /> Pay {plan.priceLabel}</>
+            <><Lock className="w-3.5 h-3.5" /> {t("pricing.pay", { price: plan.priceLabel })}</>
           )}
         </button>
       </div>
@@ -275,40 +163,15 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode }) {
 
 // ── Plan card (top section) ───────────────────────────────────────────────────
 
-function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
+function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode, t }) {
   const isPro = plan.id === "pro";
   const isBasic = plan.id === "basic";
-
-  // Pick the 4 most important differentiating features for the card
-  const cardFeatures = {
-    free: [
-      { text: "5 AI messages / conversation", ok: true },
-      { text: "All vision tests", ok: true },
-      { text: "Last 3 test results", ok: true },
-      { text: "PDF health report", ok: true },
-      { text: "Priority AI responses", ok: false },
-      { text: "Advanced analytics", ok: false },
-    ],
-    basic: [
-      { text: "50 AI messages / conversation", ok: true },
-      { text: "All vision tests", ok: true },
-      { text: "Full test history", ok: true },
-      { text: "PDF health report", ok: true },
-      { text: "Priority AI responses", ok: true },
-      { text: "Advanced analytics", ok: false },
-    ],
-    pro: [
-      { text: "Unlimited AI messages", ok: true },
-      { text: "All vision tests", ok: true },
-      { text: "Full test history", ok: true },
-      { text: "PDF health report", ok: true },
-      { text: "Priority AI responses", ok: true },
-      { text: "Advanced analytics", ok: true },
-    ],
-  }[plan.id];
+  const cardFeatures = buildPlanCardFeatures(plan.id, t);
+  const displayName = planDisplayName(plan.id, t);
+  const messagesLabel = planMessagesLabel(plan.id, t);
 
   return (
-    <div className={`relative rounded-2xl border-2 p-6 flex flex-col gap-4 transition-all duration-200 ${
+    <div className={`dashboard-hover-zoom-subtle relative rounded-2xl border-2 p-6 flex flex-col gap-4 ${
       isActive
         ? "border-cyan-500 shadow-xl shadow-cyan-500/20"
         : isDarkMode
@@ -319,7 +182,7 @@ function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
       {isPro && (
         <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap">
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow">
-            MOST POPULAR
+            {t("pricing.mostPopular")}
           </span>
         </div>
       )}
@@ -335,18 +198,18 @@ function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
         </div>
         <div>
           <h3 className={`font-bold text-lg leading-tight ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-            {plan.name}
+            {displayName}
           </h3>
           <p className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-            {plan.messagesLabel}
+            {messagesLabel}
           </p>
         </div>
         <div className="ml-auto text-right">
           <div className={`text-2xl font-extrabold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-            {plan.price === 0 ? "Free" : `$${plan.price}`}
+            {plan.price === 0 ? t("pricing.freePrice") : `$${plan.price}`}
           </div>
           {plan.price > 0 && (
-            <p className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>/month</p>
+            <p className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{t("pricing.perMonth")}</p>
           )}
         </div>
       </div>
@@ -373,7 +236,7 @@ function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
         <div className={`mt-auto rounded-xl py-2.5 text-center text-sm font-semibold ${
           isDarkMode ? "bg-slate-700 text-slate-400" : "bg-slate-100 text-slate-500"
         }`}>
-          Current plan
+          {t("pricing.currentPlanBadge")}
         </div>
       ) : plan.price === 0 ? (
         <button
@@ -382,7 +245,7 @@ function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
             isDarkMode ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
           }`}
         >
-          Downgrade to Free
+          {t("pricing.downgradeFree")}
         </button>
       ) : (
         <button
@@ -393,7 +256,7 @@ function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
               : "bg-cyan-600 hover:bg-cyan-500 text-white"
           }`}
         >
-          Upgrade to {plan.name}
+          {t("pricing.upgradeTo", { plan: displayName })}
         </button>
       )}
     </div>
@@ -402,26 +265,29 @@ function PlanCard({ plan, isActive, isCurrent, onSelect, isDarkMode }) {
 
 // ── Full comparison table ─────────────────────────────────────────────────────
 
-function ComparisonTable({ isDarkMode, activePlanId, onSelect }) {
+function ComparisonTable({ isDarkMode, activePlanId, features, t }) {
+  const categories = [...new Set(features.map((f) => f.category))];
+
   const colHeader = (planId) => {
     const p = PLANS[planId];
     const isCurrent = activePlanId === planId;
     const isPro = planId === "pro";
+    const name = planDisplayName(planId, t);
     return (
       <th key={planId} className="text-center pb-4 w-28">
         <div className={`text-sm font-bold mb-0.5 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-          {p.name}
+          {name}
         </div>
         <div className={`text-xs font-medium ${
           isPro ? "text-cyan-500" : isDarkMode ? "text-slate-400" : "text-slate-500"
         }`}>
-          {p.price === 0 ? "Free" : `$${p.price}/mo`}
+          {p.price === 0 ? t("pricing.freePrice") : `$${p.price}/mo`}
         </div>
         {isCurrent && (
           <span className={`inline-block mt-1.5 text-[10px] px-2 py-0.5 rounded-full font-semibold ${
             isDarkMode ? "bg-cyan-500/20 text-cyan-400" : "bg-cyan-100 text-cyan-700"
           }`}>
-            Current
+            {t("pricing.currentPlanBadge")}
           </span>
         )}
       </th>
@@ -429,16 +295,16 @@ function ComparisonTable({ isDarkMode, activePlanId, onSelect }) {
   };
 
   return (
-    <div className={`rounded-2xl border overflow-hidden ${
+    <div className={`dashboard-hover-zoom-subtle rounded-2xl border overflow-visible ${
       isDarkMode ? "border-slate-700 bg-slate-800/40" : "border-slate-200 bg-white"
     }`}>
       <div className={`px-6 py-4 border-b ${isDarkMode ? "border-slate-700" : "border-slate-100"}`}>
         <h2 className={`text-lg font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-          Full feature comparison
+          {t("pricing.comparisonTitle")}
         </h2>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto overflow-hidden rounded-b-2xl">
         <table className="w-full">
           <thead>
             <tr className={`border-b ${isDarkMode ? "border-slate-700" : "border-slate-100"}`}>
@@ -449,8 +315,8 @@ function ComparisonTable({ isDarkMode, activePlanId, onSelect }) {
             </tr>
           </thead>
           <tbody>
-            {CATEGORIES.map((cat) => {
-              const rows = FEATURES.filter((f) => f.category === cat);
+            {categories.map((cat) => {
+              const rows = features.filter((f) => f.category === cat);
               return [
                 // Category header row
                 <tr key={`cat-${cat}`} className={`${isDarkMode ? "bg-slate-700/30" : "bg-slate-50"}`}>
@@ -475,13 +341,13 @@ function ComparisonTable({ isDarkMode, activePlanId, onSelect }) {
                       {f.label}
                     </td>
                     <td className="text-center py-3.5">
-                      <FeatureValue value={f.free} isDarkMode={isDarkMode} planId="free" />
+                      <FeatureValue value={f.free} isDarkMode={isDarkMode} planId="free" lastThreeLabel={t("pricing.values.lastThree")} />
                     </td>
                     <td className="text-center py-3.5">
-                      <FeatureValue value={f.basic} isDarkMode={isDarkMode} planId="basic" />
+                      <FeatureValue value={f.basic} isDarkMode={isDarkMode} planId="basic" lastThreeLabel={t("pricing.values.lastThree")} />
                     </td>
                     <td className="text-center py-3.5">
-                      <FeatureValue value={f.pro} isDarkMode={isDarkMode} planId="pro" />
+                      <FeatureValue value={f.pro} isDarkMode={isDarkMode} planId="pro" lastThreeLabel={t("pricing.values.lastThree")} />
                     </td>
                   </tr>
                 )),
@@ -497,9 +363,11 @@ function ComparisonTable({ isDarkMode, activePlanId, onSelect }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function PricingPage() {
+  const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const { activePlanId, activatePlan } = usePlan();
   const navigate = useNavigate();
+  const features = useMemo(() => buildPricingFeatures(t), [t]);
 
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [succeeded, setSucceeded] = useState(false);
@@ -530,29 +398,29 @@ export default function PricingPage() {
     return (
       <div className={`min-h-screen flex items-center justify-center ${isDarkMode ? "bg-slate-900" : "bg-slate-50"}`}>
         <AnimatedBackground />
-        <div className={`relative z-10 rounded-2xl border p-10 max-w-sm w-full mx-4 text-center shadow-2xl ${
+        <div className={`dashboard-hover-zoom-subtle relative z-10 rounded-2xl border p-10 max-w-sm w-full mx-4 text-center shadow-2xl ${
           isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
         }`}>
           <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-5">
             <Check className="w-8 h-8 text-emerald-500" />
           </div>
           <h2 className={`text-2xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-            {succeededPlan?.price === 0 ? "Downgraded" : "Payment Successful!"}
+            {succeededPlan?.price === 0 ? t("pricing.downgraded") : t("pricing.paymentSuccess")}
           </h2>
           <p className={`text-sm mb-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
             {succeededPlan?.price === 0
-              ? "You are now on the Free plan."
-              : `You are now on the ${succeededPlan?.name} plan.`}
+              ? t("pricing.nowOnFree")
+              : t("pricing.nowOnPlan", { plan: planDisplayName(succeededPlan?.id, t) })}
           </p>
           <p className={`text-sm mb-8 font-medium ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}>
-            {succeededPlan?.messagesLabel}
+            {planMessagesLabel(succeededPlan?.id, t)}
           </p>
           <div className="flex flex-col gap-2">
             <button
               onClick={() => navigate("/dashboard")}
               className="w-full rounded-xl py-3 font-bold bg-cyan-600 hover:bg-cyan-500 text-white transition-colors"
             >
-              Go to Dashboard
+              {t("pricing.goDashboard")}
             </button>
             <button
               onClick={() => navigate("/ai-consult")}
@@ -560,7 +428,7 @@ export default function PricingPage() {
                 isDarkMode ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              Open AI Consult
+              {t("pricing.openAiConsult")}
             </button>
           </div>
         </div>
@@ -572,7 +440,10 @@ export default function PricingPage() {
     <div className={`min-h-screen ${isDarkMode ? "bg-slate-900" : "bg-slate-50"}`}>
       <AnimatedBackground />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 py-10">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 py-10 overflow-visible">
+        <div className="absolute top-6 right-6 z-20">
+          <LanguageSelector isDarkMode={isDarkMode} />
+        </div>
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-3">
@@ -586,25 +457,21 @@ export default function PricingPage() {
           </Link>
           <div>
             <h1 className={`text-3xl font-extrabold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-              Choose your plan
+              {t("pricing.title")}
             </h1>
             <p className={`text-sm mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              Unlock more AI messages, full test history, and advanced features
+              {t("pricing.subtitle")}
             </p>
           </div>
         </div>
 
         {/* Current plan note */}
         <p className={`text-sm mb-8 ml-14 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-          You are currently on the{" "}
-          <span className={`font-semibold ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}>
-            {PLANS[activePlanId]?.name}
-          </span>{" "}
-          plan.
+          {t("pricing.currentPlan", { plan: planDisplayName(activePlanId, t) })}
         </p>
 
         {/* Plan cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 overflow-visible pt-4">
           {Object.values(PLANS).map((plan) => (
             <PlanCard
               key={plan.id}
@@ -613,6 +480,7 @@ export default function PricingPage() {
               isCurrent={activePlanId === plan.id}
               onSelect={handleSelectPlan}
               isDarkMode={isDarkMode}
+              t={t}
             />
           ))}
         </div>
@@ -621,15 +489,15 @@ export default function PricingPage() {
         {selectedPlan && (
           <div
             id="checkout-form"
-            className={`max-w-md mx-auto rounded-2xl border p-7 shadow-2xl mb-10 ${
+            className={`dashboard-hover-zoom-subtle max-w-md mx-auto rounded-2xl border p-7 shadow-2xl mb-10 ${
               isDarkMode ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
             }`}
           >
             <h2 className={`text-lg font-bold mb-1 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-              Subscribe to {selectedPlan.name}
+              {t("pricing.subscribeTo", { plan: planDisplayName(selectedPlan.id, t) })}
             </h2>
             <p className={`text-sm mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-              {selectedPlan.priceLabel} · billed monthly · cancel anytime
+              {selectedPlan.priceLabel} {t("pricing.billedMonthly")}
             </p>
             <Elements stripe={stripePromise}>
               <CheckoutForm
@@ -637,6 +505,7 @@ export default function PricingPage() {
                 onSuccess={handlePaymentSuccess}
                 onCancel={() => setSelectedPlan(null)}
                 isDarkMode={isDarkMode}
+                t={t}
               />
             </Elements>
           </div>
@@ -646,13 +515,13 @@ export default function PricingPage() {
         <ComparisonTable
           isDarkMode={isDarkMode}
           activePlanId={activePlanId}
-          onSelect={handleSelectPlan}
+          features={features}
+          t={t}
         />
 
         {/* Footer */}
         <p className={`text-center text-xs mt-8 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
-          Demo mode · Stripe test payments only · No real charges made.
-          Test card: <span className="font-mono font-semibold">4242 4242 4242 4242</span>
+          {t("pricing.demoFooter")}
         </p>
       </div>
     </div>

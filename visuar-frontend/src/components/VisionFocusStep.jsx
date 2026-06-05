@@ -1,31 +1,18 @@
 import { Eye } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { VISION_FOCUS } from "../utils/visionFocus";
 import { EyeRestReminder } from "./EyeRestReminder";
 
 const OPTIONS = [
-  {
-    value: VISION_FOCUS.FAR,
-    title: "Far away things look blurry",
-    subtitle: "board, TV, road signs",
-  },
-  {
-    value: VISION_FOCUS.NEAR,
-    title: "Nearby things look blurry",
-    subtitle: "phone, book, laptop",
-  },
-  {
-    value: VISION_FOCUS.BOTH,
-    title: "Both near and far look blurry",
-    subtitle: null,
-  },
-  {
-    value: VISION_FOCUS.UNSURE,
-    title: "Not sure",
-    subtitle: "Short screener will recommend the best tests",
-  },
+  { value: VISION_FOCUS.FAR, titleKey: "visionFocus.farTitle", subtitleKey: "visionFocus.farSubtitle" },
+  { value: VISION_FOCUS.NEAR, titleKey: "visionFocus.nearTitle", subtitleKey: "visionFocus.nearSubtitle" },
+  { value: VISION_FOCUS.BOTH, titleKey: "visionFocus.bothTitle", subtitleKey: null },
+  { value: VISION_FOCUS.UNSURE, titleKey: "visionFocus.unsureTitle", subtitleKey: "visionFocus.unsureSubtitle" },
 ];
 
 export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-6">
       <EyeRestReminder isDarkMode={isDarkMode} />
@@ -35,10 +22,10 @@ export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
         </div>
         <div>
           <h2 className={`text-2xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-            Where do you notice blur the most?
+            {t("visionFocus.title")}
           </h2>
           <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Your selection helps us choose tests. It is not a diagnosis.
+            {t("visionFocus.subtitle")}
           </p>
         </div>
       </div>
@@ -49,7 +36,7 @@ export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
             key={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`text-left p-4 rounded-2xl border-2 transition-all ${
+            className={`text-left p-4 rounded-2xl border-2 transition-colors ${
               value === opt.value
                 ? "border-cyan-500 bg-cyan-500/10"
                 : isDarkMode
@@ -57,9 +44,11 @@ export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
                   : "border-slate-200 hover:border-cyan-300"
             }`}
           >
-            <p className={`font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>{opt.title}</p>
-            {opt.subtitle && (
-              <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>{opt.subtitle}</p>
+            <p className={`font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>{t(opt.titleKey)}</p>
+            {opt.subtitleKey && (
+              <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+                {t(opt.subtitleKey)}
+              </p>
             )}
           </button>
         ))}
@@ -71,7 +60,7 @@ export function VisionFocusStep({ value, onChange, onContinue, isDarkMode }) {
         onClick={onContinue}
         className="w-full py-3 rounded-xl font-bold bg-cyan-500 hover:bg-cyan-400 text-white disabled:opacity-40"
       >
-        Continue
+        {t("visionFocus.continue")}
       </button>
     </div>
   );

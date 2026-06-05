@@ -1,25 +1,45 @@
 import { BLUR_ENTRY_REASON } from "./blurScreenerSession";
 
-export function getBlurScreenerIntro(entryReason) {
+export function getBlurScreenerIntro(entryReason, t) {
   if (entryReason === BLUR_ENTRY_REASON.UNSURE) {
     return {
-      title: "Quick clarity check",
-      body: "We'll quickly check both distance and near clarity. This only helps choose your next test — it is not a prescription or diagnosis.",
-      distanceHint: "Part 1: Sit about 60–80 cm from your screen.",
-      nearHint: "Part 2: Move closer to about 35–40 cm for near reading.",
+      title: t("blurScreener.introUnsureTitle"),
+      body: t("blurScreener.introUnsureBody"),
+      distanceHint: t("blurScreener.distancePartHint"),
+      nearHint: t("blurScreener.nearPartHint"),
     };
   }
   return {
-    title: "Blur screener",
-    body: "You reported blur both near and far. We'll run a short distance check and a near check to see which area needs follow-up testing.",
-    distanceHint: "Part 1: Sit about 60–80 cm from your screen.",
-    nearHint: "Part 2: Move closer to about 35–40 cm for near reading.",
+    title: t("blurScreener.introBothTitle"),
+    body: t("blurScreener.introBothBody"),
+    distanceHint: t("blurScreener.distancePartHint"),
+    nearHint: t("blurScreener.nearPartHint"),
   };
 }
 
-export function getNearTransitionCopy(entryReason) {
+export function getNearTransitionCopy(entryReason, t) {
   if (entryReason === BLUR_ENTRY_REASON.UNSURE) {
-    return "Distance check done. Move to about 35–40 cm for the near reading check.";
+    return t("blurScreener.nearTransitionUnsure");
   }
-  return "Distance check done. Move closer (35–40 cm) for the near blur check.";
+  return t("blurScreener.nearTransitionBoth");
+}
+
+export function routeMessageForFlow(flow, t) {
+  const keys = {
+    distance: "blurScreener.routeDistance",
+    near: "blurScreener.routeNear",
+    full: "blurScreener.routeFull",
+    optional: "blurScreener.routeOptional",
+  };
+  return t(keys[flow] || "blurScreener.routeOptional");
+}
+
+export function labelForRecommendedFlowI18n(flow, t) {
+  const keys = {
+    distance: "blurScreener.ctaDistance",
+    near: "blurScreener.ctaNear",
+    full: "blurScreener.ctaFull",
+    optional: "blurScreener.ctaBrowse",
+  };
+  return t(keys[flow] || "blurScreener.ctaContinue");
 }

@@ -128,6 +128,48 @@
     right: 10%;
     animation: float 19s ease-in-out infinite 3s;
   }
+
+  /* Reading assist: larger text */
+  html[data-reading-assist="large"] {
+    font-size: 118.75%;
+  }
+
+  /* Default mode: magnify marked blocks on hover (low vision) */
+  html:not([data-reading-assist="large"]) .dashboard-hover-zoom,
+  html:not([data-reading-assist="large"]) .dashboard-hover-zoom-subtle,
+  html:not([data-reading-assist="large"]) .test-selection-hover-zoom {
+    @apply relative z-0 origin-center transition-[transform,box-shadow] duration-300 ease-out will-change-transform;
+  }
+
+  html:not([data-reading-assist="large"]) .dashboard-hover-zoom:hover {
+    @apply z-20 scale-[1.16] shadow-xl;
+  }
+
+  html:not([data-reading-assist="large"]) .dashboard-hover-zoom-subtle:hover {
+    @apply z-20 scale-[1.09] shadow-lg;
+  }
+
+  html:not([data-reading-assist="large"]) .test-selection-hover-zoom:hover {
+    @apply z-20 scale-[1.11] shadow-lg;
+  }
+
+  html:not([data-reading-assist="large"]) button.dashboard-hover-zoom-subtle:disabled:hover {
+    @apply z-0 scale-100 shadow-none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html:not([data-reading-assist="large"]) .dashboard-hover-zoom,
+    html:not([data-reading-assist="large"]) .dashboard-hover-zoom-subtle,
+    html:not([data-reading-assist="large"]) .test-selection-hover-zoom {
+      @apply transition-shadow duration-200;
+    }
+
+    html:not([data-reading-assist="large"]) .dashboard-hover-zoom:hover,
+    html:not([data-reading-assist="large"]) .dashboard-hover-zoom-subtle:hover,
+    html:not([data-reading-assist="large"]) .test-selection-hover-zoom:hover {
+      @apply scale-100 ring-2 ring-cyan-500/50;
+    }
+  }
 }
 
 /* Updated blinking animation with more visible effect */

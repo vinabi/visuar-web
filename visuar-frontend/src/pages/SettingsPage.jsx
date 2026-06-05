@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   Bell,
@@ -9,6 +9,7 @@ import {
   LogOut,
   Moon,
   Sun,
+  ZoomIn,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
@@ -17,12 +18,20 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { ReadingAssistPicker } from "../components/ReadingAssistPicker";
 
 export default function SettingsPage() {
   const { t } = useTranslation();
   const { isDarkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { signOut, user } = useAuth();
+
+  useEffect(() => {
+    if (location.hash === "#easier-reading") {
+      document.getElementById("easier-reading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [location.hash]);
 
   const handleLogout = async () => {
     await signOut();
@@ -129,7 +138,7 @@ export default function SettingsPage() {
                       isDarkMode ? "text-slate-400" : "text-slate-600"
                     }`}
                   >
-                    Switch between light and dark themes
+                    {t("settings.darkModeHint")}
                   </p>
                 </div>
                 <Button
@@ -149,6 +158,28 @@ export default function SettingsPage() {
                   )}
                 </Button>
               </div>
+            </div>
+
+            {/* Easier reading */}
+            <div
+              id="easier-reading"
+              className={`pb-6 border-b transition-colors scroll-mt-24 ${
+                isDarkMode ? "border-slate-700" : "border-slate-200"
+              }`}
+            >
+              <h3
+                className={`text-lg font-semibold mb-4 flex items-center gap-2 transition-colors ${
+                  isDarkMode ? "text-white" : "text-slate-900"
+                }`}
+              >
+                <ZoomIn
+                  className={`w-5 h-5 ${
+                    isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                  }`}
+                />
+                {t("settings.readingAssist")}
+              </h3>
+              <ReadingAssistPicker isDarkMode={isDarkMode} />
             </div>
 
             {/* Notifications */}
@@ -227,7 +258,7 @@ export default function SettingsPage() {
                 />
                 {t("settings.language")}
               </h3>
-              <LanguageSelector className="w-full" />
+              <LanguageSelector className="w-full" isDarkMode={isDarkMode} />
             </div>
 
             {/* Help & Support */}
@@ -246,7 +277,7 @@ export default function SettingsPage() {
                     isDarkMode ? "text-cyan-400" : "text-cyan-600"
                   }`}
                 />
-                Help & Support
+                {t("settings.helpSupport")}
               </h3>
               <div className="space-y-2">
                 <Link to="/faq">
@@ -258,7 +289,7 @@ export default function SettingsPage() {
                         : "text-slate-700 hover:bg-cyan-100 hover:text-cyan-700"
                     }`}
                   >
-                    FAQ
+                    {t("common.faq")}
                   </Button>
                 </Link>
                 <Link to="/contact-support">
@@ -270,7 +301,7 @@ export default function SettingsPage() {
                         : "text-slate-700 hover:bg-cyan-100 hover:text-cyan-700"
                     }`}
                   >
-                    Contact Support
+                    {t("common.contactSupport")}
                   </Button>
                 </Link>
                 <Link to="/privacy-policy">
@@ -282,7 +313,7 @@ export default function SettingsPage() {
                         : "text-slate-700 hover:bg-cyan-100 hover:text-cyan-700"
                     }`}
                   >
-                    Privacy Policy
+                    {t("common.privacyPolicy")}
                   </Button>
                 </Link>
               </div>

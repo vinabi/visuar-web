@@ -7,10 +7,9 @@ import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTheme } from "../context/ThemeContext";
 
 export default function FAQPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const navigate = useNavigate();
-  const isRTL = i18n.language === "ur";
 
   const [expandedFAQ, setExpandedFAQ] = useState(null);
 
@@ -120,11 +119,7 @@ export default function FAQPage() {
       </button>
 
       {/* Main Content */}
-      <div
-        className={`max-w-4xl mx-auto px-4 py-12 pt-24 relative z-10 ${
-          isRTL ? "rtl" : ""
-        }`}
-      >
+      <div className="max-w-4xl mx-auto px-4 py-12 pt-24 relative z-10">
         {/* Header */}
         <div className="mb-12 text-center">
           <h1

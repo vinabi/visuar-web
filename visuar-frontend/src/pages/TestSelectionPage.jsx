@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowLeft, Eye, Lock, Crown, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -22,13 +22,13 @@ import {
   SAFETY_COPY,
   TEST_IDS,
   planUnlocksTest,
-  PLAN_LABELS,
+  getPlanLabel,
 } from "../utils/testCatalog";
 import { startNewScreeningSession, setSessionVisionFocus } from "../utils/screeningSession";
 
 function badgeStyles(test, isDarkMode) {
   const isEyesightNumberRecommended =
-    test.badge === "Recommended" &&
+    test.badgeKey === "recommended" &&
     (test.id === TEST_IDS.SNELLEN || test.id === TEST_IDS.JAEGER);
   if (isEyesightNumberRecommended) {
     return isDarkMode ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-700";
@@ -36,18 +36,18 @@ function badgeStyles(test, isDarkMode) {
   return isDarkMode ? "bg-violet-500/20 text-violet-300" : "bg-violet-100 text-violet-700";
 }
 
-function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus }) {
+function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus, t }) {
   if (!test.available && !locked) {
     return (
       <div
-        className={`relative rounded-2xl p-6 shadow-lg cursor-not-allowed opacity-60 ${
+        className={`test-selection-hover-zoom relative rounded-2xl p-6 shadow-lg cursor-not-allowed opacity-60 ${
           isDarkMode
             ? "bg-[#1a1f3a]/50 border border-slate-700/30"
             : "bg-white/60 border border-white/40"
         }`}
       >
         <span className="text-xs px-3 py-1 rounded-full bg-slate-700/70 text-slate-500">
-          Coming Soon
+          {t("testCatalog.comingSoon")}
         </span>
         <h3 className={`text-lg font-bold mt-4 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
           {test.title}
@@ -58,11 +58,11 @@ function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus }) {
 
   if (locked) {
     const PlanIcon = requiredPlan === "pro" ? Crown : Zap;
-    const planLabel = PLAN_LABELS[requiredPlan] || requiredPlan;
+    const planLabel = getPlanLabel(requiredPlan, t);
     return (
       <Link
         to="/pricing"
-        className={`group relative rounded-2xl p-6 shadow-lg transition-all overflow-hidden ${
+        className={`test-selection-hover-zoom group relative rounded-2xl p-6 shadow-lg overflow-visible ${
           isDarkMode
             ? "bg-[#1a1f3a]/80 border border-amber-500/30 hover:border-amber-400/60"
             : "bg-white/90 border border-amber-200 hover:border-amber-400"
@@ -91,7 +91,7 @@ function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus }) {
           <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-full bg-white/90 dark:bg-slate-800/90 shadow">
             <PlanIcon className={`w-3 h-3 ${requiredPlan === "pro" ? "text-amber-500" : "text-cyan-500"}`} />
             <span className={isDarkMode ? "text-slate-200" : "text-slate-700"}>
-              {planLabel} plan required
+              {t("testCatalog.planRequired", { plan: planLabel })}
             </span>
           </span>
         </div>
@@ -107,7 +107,7 @@ function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus }) {
   return (
     <Link
       to={testTo}
-      className={`group backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all ${
+      className={`test-selection-hover-zoom group backdrop-blur-sm rounded-2xl p-6 shadow-lg ${
         isDarkMode
           ? "bg-[#1a1f3a]/80 border border-slate-700/50 hover:border-cyan-400/50"
           : "bg-white/90 border border-white/60 hover:border-cyan-300"
@@ -142,10 +142,10 @@ function TestCard({ test, isDarkMode, locked, requiredPlan, visionFocus }) {
   );
 }
 
-function TestGrid({ tests, isDarkMode, activePlanId, visionFocus }) {
+function TestGrid({ tests, isDarkMode, activePlanId, visionFocus, t }) {
   if (!tests.length) return null;
   return (
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10 overflow-visible py-1">
       {tests.map((test) => {
         const locked = !planUnlocksTest(activePlanId, test.planTier || "free");
         return (
@@ -156,6 +156,7 @@ function TestGrid({ tests, isDarkMode, activePlanId, visionFocus }) {
             locked={locked}
             requiredPlan={test.planTier}
             visionFocus={visionFocus}
+            t={t}
           />
         );
       })}
@@ -164,7 +165,7 @@ function TestGrid({ tests, isDarkMode, activePlanId, visionFocus }) {
 }
 
 export default function TestSelectionPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isDarkMode } = useTheme();
   const { activePlanId } = usePlan();
   const navigate = useNavigate();
@@ -174,12 +175,18 @@ export default function TestSelectionPage() {
   const [focusDraft, setFocusDraft] = useState(getVisionFocus);
 
   const activeFocus = phase === "tests" ? getVisionFocus() : focusDraft;
-  const { sectionTitle, sectionSubtitle, routingCopy, mainTests, supportingTests } =
-    getTestsForFocus(activeFocus);
   const focus = getVisionFocus();
+  const catalog = useMemo(
+    () => getTestsForFocus(activeFocus, t),
+    [activeFocus, t, i18n.language]
+  );
+  const { sectionTitle, sectionSubtitle, routingCopy, mainTests, supportingTests } = catalog;
   const recommendedPath = getRecommendedAssessmentPath(focus);
-  const recommendedLabel = getRecommendedAssessmentLabel(focus);
-  const unsureBrowse = focus === VISION_FOCUS.UNSURE ? getUnsureBrowseSections() : null;
+  const recommendedLabel = getRecommendedAssessmentLabel(focus, t);
+  const unsureBrowse = useMemo(
+    () => (focus === VISION_FOCUS.UNSURE ? getUnsureBrowseSections(t) : null),
+    [focus, t, i18n.language]
+  );
 
   const handleFocusContinue = () => {
     startNewScreeningSession({ visionFocus: focusDraft });
@@ -206,10 +213,10 @@ export default function TestSelectionPage() {
     >
       <AnimatedBackground isDarkMode={isDarkMode} />
       <div className="absolute top-6 right-6 z-20">
-        <LanguageSelector />
+        <LanguageSelector isDarkMode={isDarkMode} />
       </div>
 
-      <div className="w-full max-w-6xl mx-auto relative z-10">
+      <div className="w-full max-w-6xl mx-auto relative z-10 overflow-visible">
         <Link to="/dashboard">
           <Button
             variant="ghost"
@@ -222,7 +229,7 @@ export default function TestSelectionPage() {
 
         {phase === "focus" && (
           <div
-            className={`max-w-xl mx-auto backdrop-blur-md rounded-3xl shadow-xl p-8 ${
+            className={`max-w-xl mx-auto backdrop-blur-md rounded-3xl shadow-xl p-8 overflow-visible ${
               isDarkMode ? "bg-[#1a1f3a]/80 border border-slate-700/50" : "bg-white/80"
             }`}
           >
@@ -250,14 +257,14 @@ export default function TestSelectionPage() {
                 {routingCopy}
               </p>
               <p className={`mt-3 text-xs ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
-                {SAFETY_COPY}
+                {t(SAFETY_COPY)}
               </p>
               <button
                 type="button"
                 onClick={handleChangeFocus}
                 className="mt-3 text-sm text-cyan-500 hover:underline"
               >
-                Change vision focus
+                {t("testCatalog.changeVisionFocus")}
               </button>
             </div>
 
@@ -269,14 +276,14 @@ export default function TestSelectionPage() {
               >
                 <p className={`mb-4 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
                   {focus === VISION_FOCUS.UNSURE
-                    ? "We'll quickly check both distance and near clarity, then recommend the right tests."
-                    : "Short distance and near checks will show whether to focus on far vision, near vision, or a full check."}
+                    ? t("testCatalog.screenerUnsure")
+                    : t("testCatalog.screenerBoth")}
                 </p>
                 <Button
                   className="rounded-full bg-cyan-500 text-white px-8"
                   onClick={() => navigate(getBlurScreenerPath(focus))}
                 >
-                  Start Blur Screener
+                  {t("testCatalog.startBlurScreener")}
                 </Button>
               </div>
             )}
@@ -286,13 +293,14 @@ export default function TestSelectionPage() {
                 <h2
                   className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}
                 >
-                  {focus === VISION_FOCUS.UNSURE ? "Screener" : "Recommended Tests"}
+                  {focus === VISION_FOCUS.UNSURE ? t("testCatalog.screener") : t("testCatalog.recommendedTests")}
                 </h2>
                 <TestGrid
                   tests={mainTests}
                   isDarkMode={isDarkMode}
                   activePlanId={activePlanId}
                   visionFocus={focus}
+                  t={t}
                 />
               </>
             )}
@@ -302,13 +310,14 @@ export default function TestSelectionPage() {
                 <h2
                   className={`text-xl font-bold mb-4 ${isDarkMode ? "text-white" : "text-slate-900"}`}
                 >
-                  Supporting Tests
+                  {t("testCatalog.supportingTests")}
                 </h2>
                 <TestGrid
                   tests={supportingTests}
                   isDarkMode={isDarkMode}
                   activePlanId={activePlanId}
                   visionFocus={focus}
+                  t={t}
                 />
               </>
             )}
@@ -318,7 +327,7 @@ export default function TestSelectionPage() {
                 <p
                   className={`text-sm text-center ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}
                 >
-                  Or browse tests by focus while you decide
+                  {t("testCatalog.browseByFocus")}
                 </p>
                 {[
                   { key: "distance", section: unsureBrowse.distance },
@@ -340,13 +349,14 @@ export default function TestSelectionPage() {
                         isDarkMode ? "text-slate-500" : "text-slate-500"
                       }`}
                     >
-                      Recommended Tests
+                      {t("testCatalog.recommendedTests")}
                     </h3>
                     <TestGrid
                       tests={section.mainTests}
                       isDarkMode={isDarkMode}
                       activePlanId={activePlanId}
                       visionFocus={focus}
+                      t={t}
                     />
                     {section.supportingTests.length > 0 && (
                       <>
@@ -355,13 +365,14 @@ export default function TestSelectionPage() {
                             isDarkMode ? "text-slate-500" : "text-slate-500"
                           }`}
                         >
-                          Supporting Tests
+                          {t("testCatalog.supportingTests")}
                         </h3>
                         <TestGrid
                           tests={section.supportingTests}
                           isDarkMode={isDarkMode}
                           activePlanId={activePlanId}
                           visionFocus={focus}
+                          t={t}
                         />
                       </>
                     )}
@@ -385,7 +396,7 @@ export default function TestSelectionPage() {
                   </Button>
                 </Link>
                 <p className={`mt-4 text-sm ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                  Best for a more reliable estimated eyesight number.
+                  {t("testCatalog.batteryHint")}
                 </p>
               </div>
             )}

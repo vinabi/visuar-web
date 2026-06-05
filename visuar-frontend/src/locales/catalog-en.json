@@ -1,0 +1,333 @@
+{
+  "visionFocus": {
+    "title": "Where do you notice blur the most?",
+    "subtitle": "Your selection helps us choose tests. It is not a diagnosis.",
+    "farTitle": "Far away things look blurry",
+    "farSubtitle": "board, TV, road signs",
+    "nearTitle": "Nearby things look blurry",
+    "nearSubtitle": "phone, book, laptop",
+    "bothTitle": "Both near and far look blurry",
+    "unsureTitle": "Not sure",
+    "unsureSubtitle": "Short screener will recommend the best tests",
+    "continue": "Continue",
+    "eyeRestTip": "Tip before you start:",
+    "eyeRestBody": "If you have been on a screen for a while, rest your eyes for 1–2 minutes before beginning. Look at something far away or close your eyes briefly — tired eyes can make results less reliable."
+  },
+  "testCatalog": {
+    "safety": "Your selection helps us choose tests. It is not a diagnosis.",
+    "recommendedTests": "Recommended Tests",
+    "supportingTests": "Supporting Tests",
+    "screener": "Screener",
+    "changeVisionFocus": "Change vision focus",
+    "browseByFocus": "Or browse tests by focus while you decide",
+    "startBlurScreener": "Start Blur Screener",
+    "screenerUnsure": "We'll quickly check both distance and near clarity, then recommend the right tests.",
+    "screenerBoth": "Short distance and near checks will show whether to focus on far vision, near vision, or a full check.",
+    "batteryHint": "Best for a more reliable estimated eyesight number.",
+    "startBlurScreenerBtn": "Start Blur Screener",
+    "startNearBattery": "Start Full Near Vision Battery",
+    "startDistanceBattery": "Start Full Distance Refraction Battery",
+    "comingSoon": "Coming Soon",
+    "planRequired": "{{plan}} plan required",
+    "plans": {
+      "free": "Free",
+      "basic": "Basic",
+      "pro": "Pro"
+    },
+    "badges": {
+      "recommended": "Recommended",
+      "bestForEyesight": "Best for eyesight number",
+      "focusRefinement": "Focus refinement",
+      "focusFlexibility": "Focus flexibility",
+      "screener": "Screener",
+      "colourDeficiency": "Colour deficiency",
+      "preciseAcuity": "Precise acuity",
+      "supportingTest": "Supporting test",
+      "advanced": "Advanced",
+      "hidden": "Hidden",
+      "comingSoon": "Coming Soon"
+    },
+    "sections": {
+      "far": {
+        "title": "Distance Vision Tests",
+        "subtitle": "Recommended for blurry board, TV, road signs, or far objects.",
+        "routing": "Distance focused tests selected based on your blur report."
+      },
+      "near": {
+        "title": "Near Vision Tests",
+        "subtitle": "Recommended for blurry phone, book, laptop, or near reading.",
+        "routing": "Near focused tests selected based on your blur report."
+      },
+      "both": {
+        "title": "Complete Vision Assessment",
+        "subtitle": "Recommended when both distance and near vision feel unclear.",
+        "routing": "Complete assessment selected because both near and far feel blurry."
+      },
+      "unsure": {
+        "title": "Quick Vision Screener",
+        "subtitle": "We'll start with a short screener to recommend the right tests.",
+        "routing": "We'll start with a short screener to recommend the right tests."
+      }
+    },
+    "battery": {
+      "near": {
+        "title": "Full Near Vision Battery",
+        "description": "Near Eyesight Number, near–far switching, simulator, and duochrome for near blur."
+      },
+      "far": {
+        "title": "Full Distance Refraction Battery",
+        "description": "Distance Eyesight Number, refraction simulator, and duochrome for distance blur."
+      },
+      "both": {
+        "title": "Full Refraction Battery",
+        "description": "Distance and near modules for complete refractive screening."
+      }
+    },
+    "tests": {
+      "snellen-acuity": {
+        "title": "Distance Eyesight Number Test",
+        "description": "Checks how clearly you see letters and estimates your eyesight number. At the squint line, enter that row entirely incorrectly (no guessing) for an accurate result.",
+        "duration": "4 min"
+      },
+      "jaeger-acuity": {
+        "title": "Near Eyesight Number Test",
+        "description": "Near reading chart at 40 to 50 cm for phone, book, and laptop blur.",
+        "duration": "4 min"
+      },
+      "refraction-simulator": {
+        "title": "Refraction Simulator",
+        "description": "Interactive clearer comparisons — primary estimated sphere.",
+        "duration": "4 min"
+      },
+      "duochrome-refinement": {
+        "title": "Duochrome Test",
+        "description": "Red-green balance to refine sphere by about ±0.25 D.",
+        "duration": "2 min"
+      },
+      "refraction-battery": {
+        "title": "Full Refraction Battery",
+        "description": "Distance Eyesight Number, duochrome, and refraction simulator combined.",
+        "duration": "12 min"
+      },
+      "near-far-switching": {
+        "title": "Near Far Switching",
+        "description": "Checks how quickly your eyes adjust between near and far focus.",
+        "duration": "4 min"
+      },
+      "quick-screener": {
+        "title": "Quick Vision Screener",
+        "description": "One distance and one near check to recommend distance, near, or complete tests.",
+        "duration": "3 min"
+      },
+      "blur-screener": {
+        "title": "Blur Screener",
+        "description": "Short distance and near clarity checks to route you to the right follow-up tests.",
+        "duration": "3 min"
+      },
+      "color-vision": {
+        "title": "Colour Vision Test",
+        "description": "14-plate Ishihara-style procedural test — screens for red-green colour deficiency across 4 difficulty levels.",
+        "duration": "3 min"
+      },
+      "landolt-acuity": {
+        "title": "Landolt C Acuity",
+        "description": "Adaptive tumbling-ring staircase — pinpoints sharpest readable size for a precise acuity estimate.",
+        "duration": "3 min"
+      },
+      "contrast-sensitivity": {
+        "title": "Contrast Sensitivity",
+        "description": "Distance faint-letter screening — at the squint line, enter that row entirely incorrectly (no guessing). Does not estimate diopters directly.",
+        "duration": "3 min"
+      },
+      "orientation-discrimination": {
+        "title": "Orientation Discrimination",
+        "description": "Line orientation sensitivity — available from advanced menu only.",
+        "duration": "3 min"
+      },
+      "rapid-recognition": {
+        "title": "Rapid Recognition",
+        "description": "Recognition speed — not used for eyesight number estimation.",
+        "duration": "2 min"
+      },
+      "sustained-focus": {
+        "title": "Sustained Focus",
+        "description": "Coming soon — not part of core refractive screening.",
+        "duration": "5 min"
+      }
+    }
+  },
+  "dashboard": {
+    "aiConsult": "AI Consult",
+    "upgradeToBasic": "Upgrade to Basic",
+    "upgradeToPro": "Upgrade to Pro",
+    "loadHistoryErrorDesc": "Error: {{error}}. Check the browser console for details.",
+    "testsCompleted": "Tests Completed",
+    "declining": "Declining",
+    "latest": "Latest",
+    "average": "Average",
+    "total": "Total",
+    "freePlanTitle": "You're on the Free plan",
+    "basicPlanTitle": "You're on the Basic plan",
+    "freePlanDesc": "Limited to {{count}} AI messages per conversation. Upgrade to Basic for 50 messages, or Pro for unlimited.",
+    "basicPlanDesc": "Limited to {{count}} AI messages per conversation. Upgrade to Pro for unlimited messages, advanced analytics, and more.",
+    "upgradeBasic": "Upgrade to Basic",
+    "upgradePro": "Upgrade to Pro",
+    "loadingHistory": "Loading history…",
+    "notSignedIn": "Not signed in",
+    "notSignedInDesc": "Please log out and sign back in to view your history.",
+    "backendOffline": "Backend Offline",
+    "backendOfflineDesc": "Start the Python backend to load your history.",
+    "loadHistoryError": "Could not load history",
+    "noTestsYet": "No tests yet",
+    "noTestsDesc": "Logged in as {{email}}. Complete your first vision test to see results here.",
+    "hiddenResults_one": "{{count}} older result hidden — upgrade to see full history",
+    "hiddenResults_other": "{{count}} older results hidden — upgrade to see full history",
+    "upgrade": "Upgrade",
+    "generatingReport": "Generating…",
+    "export": "Export",
+    "statusPoor": "poor"
+  },
+  "settings": {
+    "darkModeHint": "Switch between light and dark themes",
+    "helpSupport": "Help & Support"
+  },
+  "blurScreener": {
+    "back": "Back",
+    "introUnsureTitle": "Quick clarity check",
+    "introUnsureBody": "We'll quickly check both distance and near clarity. This only helps choose your next test — it is not a prescription or diagnosis.",
+    "introBothTitle": "Blur screener",
+    "introBothBody": "You reported blur both near and far. We'll run a short distance check and a near check to see which area needs follow-up testing.",
+    "distancePartHint": "Part 1: Sit about 60–80 cm from your screen.",
+    "nearPartHint": "Part 2: Move closer to about 35–40 cm for near reading.",
+    "distanceLetters": "5 distance letters, one at a time",
+    "nearWords": "5 near words, one at a time",
+    "entryBoth": "Both near & far blurry",
+    "entryUnsure": "Not sure",
+    "startScreener": "Start screener",
+    "distanceTitle": "Distance blur check",
+    "distanceHint": "Sit 60–80 cm from the screen. Each letter appears alone.",
+    "nearTransitionTitle": "Near check next",
+    "nearTransitionUnsure": "Distance check done. Move to about 35–40 cm for the near reading check.",
+    "nearTransitionBoth": "Distance check done. Move closer (35–40 cm) for the near blur check.",
+    "continueNear": "Continue to near check",
+    "nearTitle": "Near blur check",
+    "nearHint": "About 35–40 cm from the screen. Short words, one at a time.",
+    "completeTitle": "Screening complete",
+    "distanceScore": "Distance score:",
+    "nearScore": "Near score:",
+    "needsFollowUp": "(needs follow-up)",
+    "okay": "(okay)",
+    "nextFlow": "Next flow:",
+    "fullCheckAnyway": "Take full vision check anyway",
+    "browseAll": "Browse all tests",
+    "routeDistance": "Your answers suggest distance blur, so we'll start with the far vision test.",
+    "routeNear": "Your answers suggest near blur, so we'll start with the near vision test.",
+    "routeFull": "Your answers suggest both near and far blur, so we'll run a fuller check.",
+    "routeOptional": "No strong blur pattern was detected. You can still take the full test for a more complete estimate.",
+    "ctaDistance": "Start distance acuity test",
+    "ctaNear": "Start near acuity test",
+    "ctaFull": "Start full vision check",
+    "ctaBrowse": "Browse tests",
+    "ctaContinue": "Continue",
+    "questionOf": "Question {{current}} of {{total}}",
+    "confidencePrompt": "How confident were you? (optional)",
+    "confidenceLow": "Low",
+    "confidenceMedium": "Medium",
+    "confidenceHigh": "High",
+    "skip": "Skip",
+    "readClearly": "Could you read this clearly?",
+    "yesClear": "Yes, read clearly",
+    "noBlurry": "No / blurry",
+    "notSure": "Not sure"
+  },
+  "pricing": {
+    "title": "Choose your plan",
+    "subtitle": "Unlock more AI messages, full test history, and advanced features",
+    "currentPlan": "You are currently on the {{plan}} plan.",
+    "comparisonTitle": "Full feature comparison",
+    "mostPopular": "MOST POPULAR",
+    "freePrice": "Free",
+    "perMonth": "/month",
+    "currentPlanBadge": "Current plan",
+    "downgradeFree": "Downgrade to Free",
+    "upgradeTo": "Upgrade to {{plan}}",
+    "subscribeTo": "Subscribe to {{plan}}",
+    "billedMonthly": "· billed monthly · cancel anytime",
+    "paymentSuccess": "Payment Successful!",
+    "downgraded": "Downgraded",
+    "nowOnFree": "You are now on the Free plan.",
+    "nowOnPlan": "You are now on the {{plan}} plan.",
+    "goDashboard": "Go to Dashboard",
+    "openAiConsult": "Open AI Consult",
+    "demoFooter": "Demo mode · Stripe test payments only · No real charges made.",
+    "cardDetails": "Card details",
+    "securedStripe": "Secured by Stripe",
+    "testCardHint": "Test card: 4242 4242 4242 4242 · any future date · any CVC",
+    "cancel": "Cancel",
+    "processing": "Processing…",
+    "pay": "Pay {{price}}",
+    "activateError": "Could not activate plan — check backend connection and try again.",
+    "plans": {
+      "free": { "name": "Free", "messages": "5 messages / conversation" },
+      "basic": { "name": "Basic", "messages": "50 messages / conversation" },
+      "pro": { "name": "Pro", "messages": "Unlimited messages" }
+    },
+    "categories": {
+      "aiConsultant": "AI Consultant",
+      "visionTesting": "Vision Testing",
+      "resultsReports": "Results & Reports",
+      "general": "General"
+    },
+    "features": {
+      "aiMessages": "AI messages / conversation",
+      "aiProfile": "AI profile-aware responses",
+      "voiceInput": "Voice input (mic recording)",
+      "aiTts": "AI text-to-speech replies",
+      "priorityAi": "Priority AI responses",
+      "allTests": "All vision tests",
+      "distanceContrast": "Distance Eyesight Number & Contrast tests",
+      "refractionTests": "Refraction tests",
+      "fullBattery": "Full Refraction Battery",
+      "testHistory": "Test history on dashboard",
+      "pdfReport": "PDF health report download",
+      "aiFindings": "AI findings & recommendations",
+      "advancedAnalytics": "Advanced health analytics",
+      "multiLanguage": "Multi-language support (EN / UR)",
+      "healthProfile": "Health profile management",
+      "cancelAnytime": "Cancel anytime"
+    },
+    "values": {
+      "fiveMessages": "5 messages",
+      "fiftyMessages": "50 messages",
+      "unlimited": "Unlimited",
+      "lastThree": "Last 3 results",
+      "allResults": "All results"
+    },
+    "cardFeatures": {
+      "free": {
+        "ai5": "5 AI messages / conversation",
+        "allTests": "All vision tests",
+        "last3": "Last 3 test results",
+        "pdf": "PDF health report",
+        "noPriority": "Priority AI responses",
+        "noAnalytics": "Advanced analytics"
+      },
+      "basic": {
+        "ai50": "50 AI messages / conversation",
+        "allTests": "All vision tests",
+        "fullHistory": "Full test history",
+        "pdf": "PDF health report",
+        "priority": "Priority AI responses",
+        "noAnalytics": "Advanced analytics"
+      },
+      "pro": {
+        "aiUnlimited": "Unlimited AI messages",
+        "allTests": "All vision tests",
+        "fullHistory": "Full test history",
+        "pdf": "PDF health report",
+        "priority": "Priority AI responses",
+        "analytics": "Advanced analytics"
+      }
+    }
+  }
+}

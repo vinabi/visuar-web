@@ -200,7 +200,7 @@ function FindingCard({ f, isDarkMode }) {
         <h4 className={`font-semibold text-sm mb-0.5 ${isDarkMode ? "text-white" : "text-slate-900"}`}>{f.title}</h4>
         <p className={`text-sm leading-relaxed ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>{f.description}</p>
         {f.description_ur && (
-          <p dir="rtl" className={`text-sm leading-relaxed mt-2 text-right ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+          <p className={`text-sm leading-relaxed mt-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
             {f.description_ur}
           </p>
         )}
@@ -592,8 +592,7 @@ export default function ResultsPage() {
           </p>
           {aiAnalysis?.summary_ur && (
             <p
-              dir="rtl"
-              className={`text-sm leading-relaxed mt-2 text-right ${
+              className={`text-sm leading-relaxed mt-2 ${
                 isDarkMode ? "text-purple-300" : "text-purple-700"
               }`}
             >

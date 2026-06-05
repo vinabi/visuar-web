@@ -10,10 +10,9 @@ import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTheme } from "../context/ThemeContext";
 
 export default function ContactSupportPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const navigate = useNavigate();
-  const isRTL = i18n.language === "ur";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -78,11 +77,7 @@ export default function ContactSupportPage() {
       </button>
 
       {/* Main Content */}
-      <div
-        className={`max-w-6xl mx-auto px-4 py-12 pt-24 relative z-10 ${
-          isRTL ? "rtl" : ""
-        }`}
-      >
+      <div className="max-w-6xl mx-auto px-4 py-12 pt-24 relative z-10">
         {/* Header */}
         <div className="mb-12 text-center">
           <h1

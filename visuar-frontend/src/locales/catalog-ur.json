@@ -1,0 +1,333 @@
+{
+  "visionFocus": {
+    "title": "آپ کو سب سے زیادہ دھند کہاں نظر آتی ہے؟",
+    "subtitle": "آپ کی منتخب کردہ معلومات ٹیسٹ چننے میں مدد کرتی ہے۔ یہ تشخیص نہیں ہے۔",
+    "farTitle": "دور کی چیزیں دھند نظر آتی ہیں",
+    "farSubtitle": "بورڈ، ٹی وی، سڑک کے نشان",
+    "nearTitle": "قریب کی چیزیں دھند نظر آتی ہیں",
+    "nearSubtitle": "فون، کتاب، لیپ ٹاپ",
+    "bothTitle": "قریب اور دور دونوں دھند",
+    "unsureTitle": "یقین نہیں",
+    "unsureSubtitle": "مختصر اسکرینر بہترین ٹیسٹ تجویز کرے گا",
+    "continue": "آگے بڑھیں",
+    "eyeRestTip": "شروع کرنے سے پہلے:",
+    "eyeRestBody": "اگر آپ کافی دیر سے اسکرین دیکھ رہے ہیں تو 1–2 منٹ آنکھیں آرام دیں۔ دور کچھ دیکھیں یا آنکھیں بند کریں — تھکی آنکھوں سے نتائج کم درست ہو سکتے ہیں۔"
+  },
+  "testCatalog": {
+    "safety": "آپ کی منتخب کردہ معلومات ٹیسٹ چننے میں مدد کرتی ہے۔ یہ تشخیص نہیں ہے۔",
+    "recommendedTests": "تجویز کردہ ٹیسٹ",
+    "supportingTests": "معاون ٹیسٹ",
+    "screener": "اسکرینر",
+    "changeVisionFocus": "نظر کی ترجیح بدلیں",
+    "browseByFocus": "یا فیصلہ کرتے ہوئے ٹیسٹ دیکھیں",
+    "startBlurScreener": "دھند اسکرینر شروع کریں",
+    "screenerUnsure": "ہم دور اور قریب دونوں کی وضاحت جلدی چیک کریں گے، پھر ٹیسٹ تجویز کریں گے۔",
+    "screenerBoth": "مختصر دور و قریب چیک سے پتہ چلے گا کہ دور، قریب یا مکمل جانچ بہتر ہے۔",
+    "batteryHint": "آنکھوں کے نمبر کا زیادہ قابل اعتماد تخمینہ۔",
+    "startBlurScreenerBtn": "دھند اسکرینر شروع کریں",
+    "startNearBattery": "مکمل قریبی نظر بیٹری شروع کریں",
+    "startDistanceBattery": "مکمل دور نظر بیٹری شروع کریں",
+    "comingSoon": "جلد آ رہا ہے",
+    "planRequired": "{{plan}} پلان درکار ہے",
+    "plans": {
+      "free": "مفت",
+      "basic": "بنیادی",
+      "pro": "پرو"
+    },
+    "badges": {
+      "recommended": "تجویز کردہ",
+      "bestForEyesight": "نظر کے نمبر کے لیے بہترین",
+      "focusRefinement": "فوکس کی باریکی",
+      "focusFlexibility": "فوکس کی لچک",
+      "screener": "اسکرینر",
+      "colourDeficiency": "رنگ کی کمی",
+      "preciseAcuity": "درست تیز نظر",
+      "supportingTest": "معاون ٹیسٹ",
+      "advanced": "اعلیٰ",
+      "hidden": "پوشیدہ",
+      "comingSoon": "جلد آ رہا ہے"
+    },
+    "sections": {
+      "far": {
+        "title": "دور نظر کے ٹیسٹ",
+        "subtitle": "بورڈ، ٹی وی، سڑک کے نشان یا دور کی چیزوں کے لیے۔",
+        "routing": "آپ کی دھند کی اطلاع کے مطابق دور کے ٹیسٹ۔"
+      },
+      "near": {
+        "title": "قریبی نظر کے ٹیسٹ",
+        "subtitle": "فون، کتاب، لیپ ٹاپ یا قریب پڑھنے کے لیے۔",
+        "routing": "آپ کی دھند کی اطلاع کے مطابق قریب کے ٹیسٹ۔"
+      },
+      "both": {
+        "title": "مکمل نظر کی جانچ",
+        "subtitle": "جب دور اور قریب دونوں دھند ہوں۔",
+        "routing": "دور اور قریب دونوں دھند ہونے پر مکمل جانچ۔"
+      },
+      "unsure": {
+        "title": "فوری نظر اسکرینر",
+        "subtitle": "ہم مختصر اسکرینر سے صحیح ٹیسٹ تجویز کریں گے۔",
+        "routing": "ہم مختصر اسکرینر سے صحیح ٹیسٹ تجویز کریں گے۔"
+      }
+    },
+    "battery": {
+      "near": {
+        "title": "مکمل قریبی نظر بیٹری",
+        "description": "قریبی نمبر، قریب-دور سوئچنگ، سیمولیٹر اور ڈوئوکروم۔"
+      },
+      "far": {
+        "title": "مکمل دور نظر بیٹری",
+        "description": "دوری نمبر، ریفریکشن سیمولیٹر اور ڈوئوکروم۔"
+      },
+      "both": {
+        "title": "مکمل ریفریکشن بیٹری",
+        "description": "مکمل ریفریکٹو اسکریننگ کے لیے دور اور قریب۔"
+      }
+    },
+    "tests": {
+      "snellen-acuity": {
+        "title": "دوری نظر نمبر ٹیسٹ",
+        "description": "حروف کتنی واضح نظر آتے ہیں اور نمبر کا تخمینہ۔ سکوائنٹ لائن پر پوری قطار غلط لکھیں (اندازہ نہ لگائیں)۔",
+        "duration": "4 منٹ"
+      },
+      "jaeger-acuity": {
+        "title": "قریبی نظر نمبر ٹیسٹ",
+        "description": "40–50 سینٹی میٹر پر قریب پڑھنے کا چارٹ۔",
+        "duration": "4 منٹ"
+      },
+      "refraction-simulator": {
+        "title": "ریفریکشن سیمولیٹر",
+        "description": "موازنہ سے تخمینہ شدہ اسفیئر۔",
+        "duration": "4 منٹ"
+      },
+      "duochrome-refinement": {
+        "title": "ڈوئوکروم ٹیسٹ",
+        "description": "سرخ-سبز توازن سے اسفیئر کی باریکی۔",
+        "duration": "2 منٹ"
+      },
+      "refraction-battery": {
+        "title": "مکمل ریفریکشن بیٹری",
+        "description": "دوری نمبر، ڈوئوکروم اور سیمولیٹر ایک ساتھ۔",
+        "duration": "12 منٹ"
+      },
+      "near-far-switching": {
+        "title": "قریب دور سوئچنگ",
+        "description": "قریب اور دور فوکس کتنی جلدی بدلتا ہے۔",
+        "duration": "4 منٹ"
+      },
+      "quick-screener": {
+        "title": "فوری نظر اسکرینر",
+        "description": "ایک دور اور ایک قریب چیک سے ٹیسٹ تجویز۔",
+        "duration": "3 منٹ"
+      },
+      "blur-screener": {
+        "title": "دھند اسکرینر",
+        "description": "مختصر دور و قریب چیک، پھر صحیح ٹیسٹ۔",
+        "duration": "3 منٹ"
+      },
+      "color-vision": {
+        "title": "رنگوں کی جانچ",
+        "description": "14 پلیٹس — سرخ-سبز رنگ کی کمی کی اسکریننگ۔",
+        "duration": "3 منٹ"
+      },
+      "landolt-acuity": {
+        "title": "لینڈولٹ C تیز نظر",
+        "description": "انکشیاطی چڑھائی — درست تخمینہ۔",
+        "duration": "3 منٹ"
+      },
+      "contrast-sensitivity": {
+        "title": "کنٹراسٹ حساسیت",
+        "description": "دور پر ہلکے حروف — سکوائنٹ لائن پر پوری قطار غلط لکھیں۔",
+        "duration": "3 منٹ"
+      },
+      "orientation-discrimination": {
+        "title": "سمت کی پہچان",
+        "description": "لائن کی سمت — اعلیٰ مینو میں۔",
+        "duration": "3 منٹ"
+      },
+      "rapid-recognition": {
+        "title": "تیز پہچان",
+        "description": "رفتار — نمبر کے تخمینے میں نہیں۔",
+        "duration": "2 منٹ"
+      },
+      "sustained-focus": {
+        "title": "مسلسل فوکس",
+        "description": "جلد آ رہا ہے۔",
+        "duration": "5 منٹ"
+      }
+    }
+  },
+  "dashboard": {
+    "aiConsult": "AI مشاورت",
+    "upgradeToBasic": "بنیادی میں اپ گریڈ",
+    "upgradeToPro": "پرو میں اپ گریڈ",
+    "testsCompleted": "مکمل ٹیسٹ",
+    "declining": "کمی",
+    "latest": "تازہ",
+    "average": "اوسط",
+    "total": "کل",
+    "freePlanTitle": "آپ مفت پلان پر ہیں",
+    "basicPlanTitle": "آپ بنیادی پلان پر ہیں",
+    "freePlanDesc": "فی گفتگو {{count}} AI پیغامات۔ بنیادی: 50، پرو: لامحدود۔",
+    "basicPlanDesc": "فی گفتگو {{count}} AI پیغامات۔ پرو: لامحدود پیغامات اور تجزیہ۔",
+    "upgradeBasic": "بنیادی میں اپ گریڈ",
+    "upgradePro": "پرو میں اپ گریڈ",
+    "loadingHistory": "تاریخ لوڈ ہو رہی ہے…",
+    "notSignedIn": "سائن ان نہیں",
+    "notSignedInDesc": "تاریخ دیکھنے کے لیے دوبارہ لاگ ان کریں۔",
+    "backendOffline": "سرور بند ہے",
+    "backendOfflineDesc": "تاریخ کے لیے Python بیک اینڈ چلائیں۔",
+    "loadHistoryError": "تاریخ لوڈ نہیں ہوئی",
+    "noTestsYet": "ابھی کوئی ٹیسٹ نہیں",
+    "noTestsDesc": "{{email}} — پہلا ٹیسٹ مکمل کریں۔",
+    "hiddenResults_one": "{{count}} پرانا نتیجہ چھپا — مکمل تاریخ کے لیے اپ گریڈ",
+    "hiddenResults_other": "{{count}} پرانے نتائج چھپے — مکمل تاریخ کے لیے اپ گریڈ",
+    "loadHistoryErrorDesc": "غلطی: {{error}}۔ براؤزر کنسول چیک کریں۔",
+    "upgrade": "اپ گریڈ",
+    "generatingReport": "بن رہی ہے…",
+    "export": "برآمد",
+    "statusPoor": "کمزور"
+  },
+  "settings": {
+    "darkModeHint": "روشن اور گہرے تھیم کے درمیان بدلیں",
+    "helpSupport": "مدد اور سپورٹ"
+  },
+  "blurScreener": {
+    "back": "واپس",
+    "introUnsureTitle": "فوری وضاحت چیک",
+    "introUnsureBody": "دور اور قریب دونوں وضاحت چیک کریں گے۔ یہ صرف اگلا ٹیسٹ منتخب کرنے میں مدد کرتا ہے — تشخیص نہیں۔",
+    "introBothTitle": "دھندلا پن اسکرینر",
+    "introBothBody": "آپ نے دور اور قریب دونوں دھندلا پن بتایا۔ مختصر دور اور قریب چیک سے معلوم ہوگا کہ کہاں مزید ٹیسٹ چاہیے۔",
+    "distancePartHint": "حصہ ۱: اسکرین سے تقریباً ۶۰–۸۰ سینٹی میٹر دور بیٹھیں۔",
+    "nearPartHint": "حصہ ۲: قریب پڑھنے کے لیے تقریباً ۳۵–۴۰ سینٹی میٹر قریب آئیں۔",
+    "distanceLetters": "۵ دور کے حروف، ایک وقت میں ایک",
+    "nearWords": "۵ قریب کے الفاظ، ایک وقت میں ایک",
+    "entryBoth": "دور اور قریب دونوں دھندلے",
+    "entryUnsure": "یقین نہیں",
+    "startScreener": "اسکرینر شروع کریں",
+    "distanceTitle": "دور دھندلا پن چیک",
+    "distanceHint": "اسکرین سے ۶۰–۸۰ سینٹی میٹر۔ ہر حرف الگ ظاہر ہوگا۔",
+    "nearTransitionTitle": "اب قریب چیک",
+    "nearTransitionUnsure": "دور چیک مکمل۔ قریب پڑھنے کے لیے ۳۵–۴۰ سینٹی میٹر قریب آئیں۔",
+    "nearTransitionBoth": "دور چیک مکمل۔ قریب دھندلا پن کے لیے ۳۵–۴۰ سینٹی میٹر قریب آئیں۔",
+    "continueNear": "قریب چیک پر جائیں",
+    "nearTitle": "قریب دھندلا پن چیک",
+    "nearHint": "اسکرین سے ۳۵–۴۰ سینٹی میٹر۔ مختصر الفاظ، ایک وقت میں ایک۔",
+    "completeTitle": "اسکریننگ مکمل",
+    "distanceScore": "دور اسکور:",
+    "nearScore": "قریب اسکور:",
+    "needsFollowUp": "(مزید چیک ضروری)",
+    "okay": "(ٹھیک)",
+    "nextFlow": "اگلا مرحلہ:",
+    "fullCheckAnyway": "پھر بھی مکمل بینائی چیک کریں",
+    "browseAll": "تمام ٹیسٹ دیکھیں",
+    "routeDistance": "جوابات دور دھندلا پن کی طرف اشارہ کرتے ہیں — دور بینائی ٹیسٹ سے شروع کریں گے۔",
+    "routeNear": "جوابات قریب دھندلا پن کی طرف اشارہ کرتے ہیں — قریب بینائی ٹیسٹ سے شروع کریں گے۔",
+    "routeFull": "جوابات دور اور قریب دونوں دھندلے پن کی طرف اشارہ کرتے ہیں — مکمل چیک کریں گے۔",
+    "routeOptional": "واضح دھندلا پن نہیں ملا۔ مکمل ٹیسٹ سے بہتر تخمینہ مل سکتا ہے۔",
+    "ctaDistance": "دور بینائی ٹیسٹ شروع کریں",
+    "ctaNear": "قریب بینائی ٹیسٹ شروع کریں",
+    "ctaFull": "مکمل بینائی چیک شروع کریں",
+    "ctaBrowse": "ٹیسٹ دیکھیں",
+    "ctaContinue": "جاری رکھیں",
+    "questionOf": "سوال {{current}} از {{total}}",
+    "confidencePrompt": "آپ کتنے پراعتماد تھے؟ (اختیاری)",
+    "confidenceLow": "کم",
+    "confidenceMedium": "درمیانہ",
+    "confidenceHigh": "زیادہ",
+    "skip": "چھوڑیں",
+    "readClearly": "کیا یہ واضح پڑھا جا سکا؟",
+    "yesClear": "ہاں، واضح تھا",
+    "noBlurry": "نہیں / دھندلا",
+    "notSure": "یقین نہیں"
+  },
+  "pricing": {
+    "title": "اپنا پلان منتخب کریں",
+    "subtitle": "مزید AI پیغامات، مکمل ٹیسٹ تاریخ، اور جدید خصوصیات",
+    "currentPlan": "آپ فی الحال {{plan}} پلان پر ہیں۔",
+    "comparisonTitle": "مکمل خصوصیات کا موازنہ",
+    "mostPopular": "سب سے مقبول",
+    "freePrice": "مفت",
+    "perMonth": "/ماہ",
+    "currentPlanBadge": "موجودہ پلان",
+    "downgradeFree": "مفت پلان پر واپس",
+    "upgradeTo": "{{plan}} اپ گریڈ",
+    "subscribeTo": "{{plan}} سبسکرائب",
+    "billedMonthly": "· ماہانہ بل · کسی وقت منسوخ",
+    "paymentSuccess": "ادائیگی کامیاب!",
+    "downgraded": "پلان کم کر دیا",
+    "nowOnFree": "آپ اب مفت پلان پر ہیں۔",
+    "nowOnPlan": "آپ اب {{plan}} پلان پر ہیں۔",
+    "goDashboard": "ڈیش بورڈ پر جائیں",
+    "openAiConsult": "AI مشاورت کھولیں",
+    "demoFooter": "ڈیمو موڈ · صرف Stripe ٹیسٹ · کوئی حقیقی چارج نہیں۔",
+    "cardDetails": "کارڈ کی تفصیل",
+    "securedStripe": "Stripe سے محفوظ",
+    "testCardHint": "ٹیسٹ کارڈ: 4242 4242 4242 4242 · کوئی بھی تاریخ · کوئی بھی CVC",
+    "cancel": "منسوخ",
+    "processing": "پروسیسنگ…",
+    "pay": "{{price}} ادا کریں",
+    "activateError": "پلان فعال نہیں ہوا — بیک اینڈ چیک کریں۔",
+    "plans": {
+      "free": { "name": "مفت", "messages": "فی گفتگو ۵ پیغامات" },
+      "basic": { "name": "بنیادی", "messages": "فی گفتگو ۵۰ پیغامات" },
+      "pro": { "name": "پرو", "messages": "لامحدود پیغامات" }
+    },
+    "categories": {
+      "aiConsultant": "AI مشیر",
+      "visionTesting": "بینائی ٹیسٹ",
+      "resultsReports": "نتائج اور رپورٹیں",
+      "general": "عام"
+    },
+    "features": {
+      "aiMessages": "AI پیغامات / گفتگو",
+      "aiProfile": "پروفائل کے مطابق AI جواب",
+      "voiceInput": "آواز ان پٹ (مائیک)",
+      "aiTts": "AI متن سے تقریر",
+      "priorityAi": "ترجیحی AI جواب",
+      "allTests": "تمام بینائی ٹیسٹ",
+      "distanceContrast": "دور بینائی نمبر اور کنٹراسٹ",
+      "refractionTests": "ریفریکشن ٹیسٹ",
+      "fullBattery": "مکمل ریفریکشن بیٹری",
+      "testHistory": "ڈیش بورڈ پر ٹیسٹ تاریخ",
+      "pdfReport": "PDF صحت رپورٹ",
+      "aiFindings": "AI نتائج اور سفارشات",
+      "advancedAnalytics": "جدید صحت تجزیہ",
+      "multiLanguage": "کثیر زبان (EN / UR)",
+      "healthProfile": "صحت پروفائل",
+      "cancelAnytime": "کسی وقت منسوخ"
+    },
+    "values": {
+      "fiveMessages": "۵ پیغامات",
+      "fiftyMessages": "۵۰ پیغامات",
+      "unlimited": "لامحدود",
+      "lastThree": "آخری ۳ نتائج",
+      "allResults": "تمام نتائج"
+    },
+    "cardFeatures": {
+      "free": {
+        "ai5": "فی گفتگو ۵ AI پیغامات",
+        "allTests": "تمام بینائی ٹیسٹ",
+        "last3": "آخری ۳ ٹیسٹ نتائج",
+        "pdf": "PDF صحت رپورٹ",
+        "noPriority": "ترجیحی AI جواب",
+        "noAnalytics": "جدید تجزیہ"
+      },
+      "basic": {
+        "ai50": "فی گفتگو ۵۰ AI پیغامات",
+        "allTests": "تمام بینائی ٹیسٹ",
+        "fullHistory": "مکمل ٹیسٹ تاریخ",
+        "pdf": "PDF صحت رپورٹ",
+        "priority": "ترجیحی AI جواب",
+        "noAnalytics": "جدید تجزیہ"
+      },
+      "pro": {
+        "aiUnlimited": "لامحدود AI پیغامات",
+        "allTests": "تمام بینائی ٹیسٹ",
+        "fullHistory": "مکمل ٹیسٹ تاریخ",
+        "pdf": "PDF صحت رپورٹ",
+        "priority": "ترجیحی AI جواب",
+        "analytics": "جدید تجزیہ"
+      }
+    }
+  }
+}

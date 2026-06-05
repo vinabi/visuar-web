@@ -19,18 +19,18 @@ import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import OnboardingPage from "./pages/OnboardingPage";
 import { AuthProvider } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { ReadingAssistProvider } from "./context/ReadingAssistContext";
 import { PlanProvider } from "./context/PlanContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-import { VoiceControlButton } from "./components/VoiceControlButton";
 import PricingPage from "./pages/PricingPage";
 
 function App() {
   return (
     <ThemeProvider>
+      <ReadingAssistProvider>
       <AuthProvider>
         <PlanProvider>
         <Router>
-          <VoiceControlButton />
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/login" element={<LoginPage />} />
@@ -125,6 +125,7 @@ function App() {
         </Router>
         </PlanProvider>
       </AuthProvider>
+      </ReadingAssistProvider>
     </ThemeProvider>
   );
 }

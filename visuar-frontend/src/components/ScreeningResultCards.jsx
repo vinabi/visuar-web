@@ -167,7 +167,7 @@ export function BilingualAIExplanation({ ai, isDarkMode }) {
       )}
 
       {(screening.summary_ur || ai.summary_ur) && (
-        <div dir="rtl" className="text-right">
+        <div>
           <p className={`text-xs font-semibold uppercase mb-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
             اردو
           </p>
@@ -183,7 +183,7 @@ export function BilingualAIExplanation({ ai, isDarkMode }) {
         </p>
       )}
       {(screening.safety_note_ur || ai.safety_note_ur) && (
-        <p dir="rtl" className={`text-sm italic text-right ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+        <p className={`text-sm italic ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
           {screening.safety_note_ur || ai.safety_note_ur}
         </p>
       )}

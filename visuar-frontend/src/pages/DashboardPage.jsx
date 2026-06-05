@@ -12,6 +12,7 @@ import {
   Eye,
   Settings,
   LogOut,
+  ZoomIn,
   Loader2,
   Crown,
   Zap,
@@ -30,7 +31,18 @@ import { startNewScreeningSession } from "../utils/screeningSession";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
 export default function DashboardPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language?.startsWith("ur") ? "ur-PK" : "en-US";
+
+  const statusLabel = (status) => {
+    const key = {
+      excellent: "dashboard.excellent",
+      good: "dashboard.good",
+      fair: "dashboard.fair",
+      poor: "dashboard.statusPoor",
+    }[status];
+    return key ? t(key) : status;
+  };
   const { isDarkMode } = useTheme();
   const navigate = useNavigate();
   const { signOut, user, session } = useAuth();
@@ -41,16 +53,8 @@ export default function DashboardPage() {
   const [fetchError, setFetchError] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
 
-  const TEST_TYPE_LABELS = {
-    "snellen-acuity": "Distance Eyesight Number Test",
-    "jaeger-acuity": "Near Eyesight Number Test",
-    "contrast-sensitivity": "Contrast Sensitivity",
-    "orientation-discrimination": "Orientation Discrimination",
-    "rapid-recognition": "Rapid Recognition",
-    "refraction-battery": "Full Refraction Battery",
-    "duochrome-refinement": "Duochrome Test",
-    "refraction-simulator": "Refraction Simulator",
-  };
+  const testTypeLabel = (testType) =>
+    t(`testCatalog.tests.${testType}.title`, { defaultValue: testType });
 
   const handleLogout = async () => {
     await signOut();
@@ -112,7 +116,7 @@ export default function DashboardPage() {
               id: r.id,
               testType: r.test_type,
               date: r.created_at,
-              type: TEST_TYPE_LABELS[r.test_type] || r.test_type,
+              type: testTypeLabel(r.test_type),
               score: r.overall_score,
               left_acuity: r.left_eye_acuity,
               right_acuity: r.right_eye_acuity,
@@ -415,7 +419,7 @@ export default function DashboardPage() {
     >
       <AnimatedBackground isDarkMode={isDarkMode} />
 
-      <div className="max-w-7xl mx-auto relative z-10">
+      <div className="max-w-7xl mx-auto relative z-10 overflow-visible">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <Link to="/">
@@ -432,7 +436,19 @@ export default function DashboardPage() {
             </Button>
           </Link>
           <div className="flex gap-2">
-            <LanguageSelector />
+            <LanguageSelector isDarkMode={isDarkMode} />
+            <Link to="/settings#easier-reading" title={t("settings.readingAssist")}>
+              <Button
+                variant="ghost"
+                className={`transition-colors ${
+                  isDarkMode
+                    ? "text-slate-300 hover:text-white hover:bg-slate-800/50"
+                    : "text-slate-700 hover:text-cyan-600 hover:bg-white/60"
+                }`}
+              >
+                <ZoomIn className="w-5 h-5" />
+              </Button>
+            </Link>
             <Link to="/settings">
               <Button
                 variant="ghost"
@@ -461,7 +477,7 @@ export default function DashboardPage() {
 
         {/* Main Content Card */}
         <div
-          className={`backdrop-blur-md rounded-3xl shadow-xl p-4 sm:p-8 md:p-12 transition-colors ${
+          className={`backdrop-blur-md rounded-3xl shadow-xl p-4 sm:p-8 md:p-12 transition-colors overflow-visible ${
             isDarkMode
               ? "bg-[#1a1f3a]/80 border border-slate-700/50"
               : "bg-white/80 border border-white/40"
@@ -533,7 +549,7 @@ export default function DashboardPage() {
                       : "border-fuchsia-500/20 text-fuchsia-700 hover:bg-fuchsia-500 hover:text-white hover:border-fuchsia-500 bg-transparent ring-fuchsia-500/40 ring-offset-white"
                   }`}
                 >
-                  AI Consult
+                  {t("dashboard.aiConsult")}
                 </Button>
               </Link>
               {activePlanId !== "pro" && (
@@ -543,7 +559,7 @@ export default function DashboardPage() {
                     className="w-full sm:w-auto h-10 sm:h-14 px-4 sm:px-8 text-sm sm:text-base rounded-full transition-all bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-lg shadow-amber-500/30 hover:shadow-xl hover:shadow-amber-500/40"
                   >
                     <Crown className="mr-1.5 w-4 h-4 sm:w-5 sm:h-5" />
-                    {activePlanId === "free" ? "Upgrade to Basic" : "Upgrade to Pro"}
+                    {activePlanId === "free" ? t("dashboard.upgradeToBasic") : t("dashboard.upgradeToPro")}
                   </Button>
                 </Link>
               )}
@@ -551,9 +567,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8 md:mb-10">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8 md:mb-10 overflow-visible">
             <div
-              className={`group rounded-2xl p-3 sm:p-6 border hover:shadow-lg transition-all cursor-pointer active:scale-95 ${
+              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
                 isDarkMode
                   ? "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-400/20 shadow-lg shadow-cyan-500/10"
                   : "bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-100 shadow-md"
@@ -578,7 +594,7 @@ export default function DashboardPage() {
                       : "bg-cyan-500 text-white group-hover:bg-cyan-600"
                   }`}
                 >
-                  Latest
+                  {t("dashboard.latest")}
                 </Badge>
               </div>
               <div
@@ -598,7 +614,7 @@ export default function DashboardPage() {
             </div>
 
             <div
-              className={`group rounded-2xl p-3 sm:p-6 border hover:shadow-lg transition-all cursor-pointer active:scale-95 ${
+              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
                 isDarkMode
                   ? "bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border-blue-400/20 shadow-lg shadow-blue-500/10"
                   : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 shadow-md"
@@ -623,7 +639,7 @@ export default function DashboardPage() {
                       : "bg-blue-500 text-white group-hover:bg-blue-600"
                   }`}
                 >
-                  Average
+                  {t("dashboard.average")}
                 </Badge>
               </div>
               <div
@@ -643,7 +659,7 @@ export default function DashboardPage() {
             </div>
 
             <div
-              className={`group rounded-2xl p-3 sm:p-6 border hover:shadow-lg transition-all cursor-pointer active:scale-95 ${
+              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
                 scoreImprovement >= 0
                   ? isDarkMode
                     ? "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-400/20 shadow-lg shadow-green-500/10"
@@ -702,7 +718,7 @@ export default function DashboardPage() {
               >
                 {scoreImprovement >= 0
                   ? t("dashboard.improvement")
-                  : "Declining"}
+                  : t("dashboard.declining")}
               </div>
               <div
                 className={`text-xs sm:text-sm transition-colors ${
@@ -714,7 +730,7 @@ export default function DashboardPage() {
             </div>
 
             <div
-              className={`group rounded-2xl p-3 sm:p-6 border hover:shadow-lg transition-all cursor-pointer active:scale-95 ${
+              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
                 isDarkMode
                   ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-400/20 shadow-lg shadow-purple-500/10"
                   : "bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100 shadow-md"
@@ -739,7 +755,7 @@ export default function DashboardPage() {
                       : "bg-purple-500 text-white group-hover:bg-purple-600"
                   }`}
                 >
-                  Total
+                  {t("dashboard.total")}
                 </Badge>
               </div>
               <div
@@ -754,7 +770,7 @@ export default function DashboardPage() {
                   isDarkMode ? "text-slate-400" : "text-slate-600"
                 }`}
               >
-                Tests Completed
+                {t("dashboard.testsCompleted")}
               </div>
             </div>
           </div>
@@ -762,13 +778,13 @@ export default function DashboardPage() {
           {/* Upgrade Banner — shown for Free and Basic plans */}
           {activePlanId !== "pro" && (() => {
             const isFree = activePlanId === "free";
-            const bannerTitle = isFree ? "You're on the Free plan" : "You're on the Basic plan";
+            const bannerTitle = isFree ? t("dashboard.freePlanTitle") : t("dashboard.basicPlanTitle");
             const bannerDesc = isFree
-              ? `Limited to ${plan.maxMessages} AI messages per conversation. Upgrade to Basic for 50 messages, or Pro for unlimited.`
-              : `Limited to ${plan.maxMessages} AI messages per conversation. Upgrade to Pro for unlimited messages, advanced analytics, and more.`;
-            const btnText = isFree ? "Upgrade to Basic" : "Upgrade to Pro";
+              ? t("dashboard.freePlanDesc", { count: plan.maxMessages })
+              : t("dashboard.basicPlanDesc", { count: plan.maxMessages });
+            const btnText = isFree ? t("dashboard.upgradeBasic") : t("dashboard.upgradePro");
             return (
-              <div className={`mb-8 rounded-2xl border-2 p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
+              <div className={`dashboard-hover-zoom-subtle mb-8 rounded-2xl border-2 p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
                 isDarkMode
                   ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30"
                   : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
@@ -819,43 +835,45 @@ export default function DashboardPage() {
                   ? <Loader2 className="mr-1 sm:mr-2 w-4 h-4 animate-spin" />
                   : <Download className="mr-1 sm:mr-2 w-4 h-4" />}
                 <span className="hidden sm:inline">
-                  {reportLoading ? "Generating…" : t("dashboard.downloadReport")}
+                  {reportLoading ? t("dashboard.generatingReport") : t("dashboard.downloadReport")}
                 </span>
-                <span className="sm:hidden">{reportLoading ? "…" : "Export"}</span>
+                <span className="sm:hidden">{reportLoading ? "…" : t("dashboard.export")}</span>
               </Button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 overflow-visible py-1">
               {historyLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className={`w-8 h-8 animate-spin ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
-                  <span className={`ml-3 text-lg ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Loading history…</span>
+                  <span className={`ml-3 text-lg ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.loadingHistory")}</span>
                 </div>
               ) : fetchError ? (
                 <div className={`text-center py-12 rounded-xl border ${isDarkMode ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"}`}>
                   <Eye className={`w-10 h-10 mx-auto mb-3 ${isDarkMode ? "text-red-400" : "text-red-400"}`} />
                   {fetchError === "not_authenticated" ? (
                     <>
-                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>Not signed in</p>
-                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Please log out and sign back in to view your history.</p>
+                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.notSignedIn")}</p>
+                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.notSignedInDesc")}</p>
                     </>
                   ) : fetchError === "network_error" ? (
                     <>
-                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>Backend Offline</p>
-                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Start the Python backend: <code className="text-xs bg-black/20 px-1 rounded">python -m uvicorn main:app --reload</code></p>
+                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.backendOffline")}</p>
+                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.backendOfflineDesc")}</p>
                     </>
                   ) : (
                     <>
-                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>Could not load history</p>
-                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Error: {fetchError}. Check the browser console for details.</p>
+                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.loadHistoryError")}</p>
+                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                        {t("dashboard.loadHistoryErrorDesc", { error: fetchError })}
+                      </p>
                     </>
                   )}
                 </div>
               ) : testHistory.length === 0 ? (
                 <div className={`text-center py-12 rounded-xl border ${isDarkMode ? "border-slate-700/50 bg-slate-800/20" : "border-slate-200 bg-slate-50"}`}>
                   <Eye className={`w-10 h-10 mx-auto mb-3 ${isDarkMode ? "text-slate-600" : "text-slate-300"}`} />
-                  <p className={`text-lg font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>No tests yet</p>
-                  <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Logged in as <strong>{user?.email}</strong>. Complete your first vision test to see results here.</p>
+                  <p className={`text-lg font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.noTestsYet")}</p>
+                  <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{t("dashboard.noTestsDesc", { email: user?.email })}</p>
                 </div>
               ) : (() => {
                 const FREE_LIMIT = 3;
@@ -871,7 +889,7 @@ export default function DashboardPage() {
                     {visibleTests.map((test) => (
                       <div
                         key={test.id}
-                        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-xl border hover:shadow-md transition-all ${
+                        className={`dashboard-hover-zoom-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-xl border ${
                           isDarkMode
                             ? "bg-slate-800/30 border-slate-700/50 hover:border-cyan-400/50 hover:bg-slate-800/50"
                             : "bg-white border-slate-200 hover:border-cyan-300"
@@ -902,7 +920,7 @@ export default function DashboardPage() {
                                 isDarkMode ? "text-slate-400" : "text-slate-600"
                               }`}
                             >
-                              {new Date(test.date).toLocaleDateString("en-US", {
+                              {new Date(test.date).toLocaleDateString(dateLocale, {
                                 month: "long",
                                 day: "numeric",
                                 year: "numeric",
@@ -935,7 +953,7 @@ export default function DashboardPage() {
                                   : "bg-slate-500 text-white transition-all"
                               }
                             >
-                              {test.status}
+                              {statusLabel(test.status)}
                             </Badge>
                           </div>
                           <Link to={`/results/${test.id}`}>
@@ -959,7 +977,7 @@ export default function DashboardPage() {
                     {lockedCount > 0 && (
                       <Link
                         to="/pricing"
-                        className={`relative flex items-center justify-between gap-3 p-4 sm:p-5 rounded-xl border transition-all overflow-hidden group ${
+                        className={`dashboard-hover-zoom-subtle relative flex items-center justify-between gap-3 p-4 sm:p-5 rounded-xl border overflow-hidden group ${
                           isDarkMode
                             ? "bg-slate-800/20 border-amber-500/30 hover:border-amber-400/60"
                             : "bg-amber-50/60 border-amber-200 hover:border-amber-400"
@@ -985,12 +1003,12 @@ export default function DashboardPage() {
                             <Lock className="w-4 h-4 text-white" />
                           </div>
                           <span className={`text-sm font-bold ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
-                            {lockedCount} older {lockedCount === 1 ? "result" : "results"} hidden — upgrade to see full history
+                            {t("dashboard.hiddenResults", { count: lockedCount })}
                           </span>
                           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
                             isDarkMode ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "bg-amber-100 text-amber-700 border border-amber-300"
                           }`}>
-                            Upgrade
+                            {t("dashboard.upgrade")}
                           </span>
                         </div>
                       </Link>

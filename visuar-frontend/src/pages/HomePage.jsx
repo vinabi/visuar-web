@@ -8,11 +8,10 @@ import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
 
 export default function HomePage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const { signOut } = useAuth();
   const navigate = useNavigate();
-  const isRTL = i18n.language === "ur";
 
   const handleLogout = async () => {
     await signOut();
@@ -34,11 +33,7 @@ export default function HomePage() {
         <LanguageSelector />
       </div>
 
-      <div
-        className={`flex flex-col min-h-screen items-center justify-between py-6 relative z-10 ${
-          isRTL ? "rtl" : ""
-        }`}
-      >
+      <div className="flex flex-col min-h-screen items-center justify-between py-6 relative z-10">
         {/* Main Content */}
         <div className="text-center space-y-8 max-w-3xl">
           <div className="flex justify-center mb-8">
@@ -56,11 +51,7 @@ export default function HomePage() {
           </div>
 
           {/* Main Heading */}
-          <h1
-            className={`text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight ${
-              isRTL ? "leading-relaxed" : ""
-            }`}
-          >
+          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-relaxed">
             <span
               className={`transition-colors ${
                 isDarkMode ? "text-white" : "text-slate-900"
@@ -77,33 +68,13 @@ export default function HomePage() {
             </span>
           </h1>
 
-          {/* Subtitle */}
-          {isRTL ? (
-            <div className="flex flex-row-reverse items-center justify-center gap-2 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-              <p
-                className={`font-semibold pb-6 transition-colors ${
-                  isDarkMode ? "text-cyan-400" : "text-cyan-600"
-                }`}
-              >
-                Visuar
-              </p>
-              <p
-                className={`text-right transition-colors ${
-                  isDarkMode ? "text-slate-300" : "text-slate-600"
-                }`}
-              >
-                {t("home.subtitle")}
-              </p>
-            </div>
-          ) : (
-            <p
-              className={`text-lg md:text-xl max-w-2xl mx-auto leading-relaxed transition-colors ${
-                isDarkMode ? "text-slate-300" : "text-slate-600"
-              }`}
-            >
-              {t("home.subtitle")}
-            </p>
-          )}
+          <p
+            className={`text-lg md:text-xl max-w-2xl mx-auto leading-relaxed transition-colors ${
+              isDarkMode ? "text-slate-300" : "text-slate-600"
+            }`}
+          >
+            {t("home.subtitle")}
+          </p>
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">

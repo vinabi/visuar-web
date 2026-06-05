@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +17,6 @@ import {
 import {
   buildScreeningResult,
   pathForRecommendedFlow,
-  labelForRecommendedFlow,
   visionFocusForFlow,
   RECOMMENDED_FLOW,
 } from "../utils/blurScreenerRouting";
@@ -24,7 +24,12 @@ import {
   DISTANCE_BLUR_ITEMS,
   NEAR_BLUR_ITEMS,
 } from "../utils/blurScreenerStimuli";
-import { getBlurScreenerIntro, getNearTransitionCopy } from "../utils/blurScreenerCopy";
+import {
+  getBlurScreenerIntro,
+  getNearTransitionCopy,
+  routeMessageForFlow,
+  labelForRecommendedFlowI18n,
+} from "../utils/blurScreenerCopy";
 import { setVisionFocus, VISION_FOCUS } from "../utils/visionFocus";
 import { setSessionVisionFocus, startNewScreeningSession } from "../utils/screeningSession";
 import { TEST_IDS } from "../utils/testCatalog";
@@ -46,6 +51,7 @@ function resolveEntryReason(location, searchParams) {
 }
 
 export default function BlurScreenerPage() {
+  const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
@@ -55,7 +61,7 @@ export default function BlurScreenerPage() {
     () => resolveEntryReason(location, searchParams),
     [location.state, searchParams]
   );
-  const intro = useMemo(() => getBlurScreenerIntro(entryReason), [entryReason]);
+  const intro = useMemo(() => getBlurScreenerIntro(entryReason, t), [entryReason, t]);
 
   const [phase, setPhase] = useState("intro");
   const [distanceStats, setDistanceStats] = useState(null);
@@ -126,7 +132,7 @@ export default function BlurScreenerPage() {
     >
       <AnimatedBackground isDarkMode={isDarkMode} />
       <div className="absolute top-6 right-6 z-20">
-        <LanguageSelector />
+        <LanguageSelector isDarkMode={isDarkMode} />
       </div>
 
       <div className="w-full max-w-2xl mx-auto relative z-10 flex-1 p-6 md:p-8">
@@ -135,7 +141,7 @@ export default function BlurScreenerPage() {
             variant="ghost"
             className={`mb-6 ${isDarkMode ? "text-slate-300 hover:text-white" : "text-slate-700"}`}
           >
-            <ArrowLeft className="mr-2 w-4 h-4" /> Back
+            <ArrowLeft className="mr-2 w-4 h-4" /> {t("blurScreener.back")}
           </Button>
         </Link>
 
@@ -151,18 +157,20 @@ export default function BlurScreenerPage() {
               }`}
             >
               <li>{intro.distanceHint}</li>
-              <li>5 distance letters, one at a time</li>
+              <li>{t("blurScreener.distanceLetters")}</li>
               <li>{intro.nearHint}</li>
-              <li>5 near words, one at a time</li>
+              <li>{t("blurScreener.nearWords")}</li>
             </ul>
             <p className={`text-xs mb-6 ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
-              Entry: {entryReason === BLUR_ENTRY_REASON.BOTH ? "Both near & far blurry" : "Not sure"}
+              {entryReason === BLUR_ENTRY_REASON.BOTH
+                ? t("blurScreener.entryBoth")
+                : t("blurScreener.entryUnsure")}
             </p>
             <Button
               className="w-full rounded-full bg-cyan-500 hover:bg-cyan-400 text-white h-12"
               onClick={startScreener}
             >
-              Start screener
+              {t("blurScreener.startScreener")}
             </Button>
           </div>
         )}
@@ -171,8 +179,8 @@ export default function BlurScreenerPage() {
           <div className={panelClass}>
             <BlurScreenerPart
               items={DISTANCE_BLUR_ITEMS}
-              partTitle="Distance blur check"
-              partHint="Sit 60–80 cm from the screen. Each letter appears alone."
+              partTitle={t("blurScreener.distanceTitle")}
+              partHint={t("blurScreener.distanceHint")}
               ppi={ppi}
               isDarkMode={isDarkMode}
               onComplete={finishDistance}
@@ -183,16 +191,16 @@ export default function BlurScreenerPage() {
         {phase === "near_transition" && (
           <div className={`${panelClass} text-center`}>
             <h2 className={`text-2xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-              Near check next
+              {t("blurScreener.nearTransitionTitle")}
             </h2>
             <p className={`mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-              {getNearTransitionCopy(entryReason)}
+              {getNearTransitionCopy(entryReason, t)}
             </p>
             <Button
               className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-10 h-12"
               onClick={() => setPhase("near")}
             >
-              Continue to near check
+              {t("blurScreener.continueNear")}
             </Button>
           </div>
         )}
@@ -201,8 +209,8 @@ export default function BlurScreenerPage() {
           <div className={panelClass}>
             <BlurScreenerPart
               items={NEAR_BLUR_ITEMS}
-              partTitle="Near blur check"
-              partHint="About 35–40 cm from the screen. Short words, one at a time."
+              partTitle={t("blurScreener.nearTitle")}
+              partHint={t("blurScreener.nearHint")}
               ppi={ppi}
               isDarkMode={isDarkMode}
               onComplete={finishNear}
@@ -216,10 +224,10 @@ export default function BlurScreenerPage() {
               <CheckCircle2 className={`w-12 h-12 ${isDarkMode ? "text-green-400" : "text-green-600"}`} />
             </div>
             <h2 className={`text-2xl font-bold text-center mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-              Screening complete
+              {t("blurScreener.completeTitle")}
             </h2>
             <p className={`text-center mb-6 ${isDarkMode ? "text-slate-300" : "text-slate-700"}`}>
-              {screeningResult.message}
+              {routeMessageForFlow(screeningResult.recommendedFlow, t)}
             </p>
 
             <div
@@ -228,17 +236,22 @@ export default function BlurScreenerPage() {
               }`}
             >
               <p>
-                <strong>Distance score:</strong>{" "}
+                <strong>{t("blurScreener.distanceScore")}</strong>{" "}
                 {Math.round(screeningResult.distanceScore * 100)}%
-                {screeningResult.distanceWeak ? " (needs follow-up)" : " (okay)"}
+                {screeningResult.distanceWeak
+                  ? t("blurScreener.needsFollowUp")
+                  : t("blurScreener.okay")}
               </p>
               <p>
-                <strong>Near score:</strong>{" "}
+                <strong>{t("blurScreener.nearScore")}</strong>{" "}
                 {Math.round(screeningResult.nearScore * 100)}%
-                {screeningResult.nearWeak ? " (needs follow-up)" : " (okay)"}
+                {screeningResult.nearWeak
+                  ? t("blurScreener.needsFollowUp")
+                  : t("blurScreener.okay")}
               </p>
               <p>
-                <strong>Next flow:</strong> {screeningResult.recommendedFlow}
+                <strong>{t("blurScreener.nextFlow")}</strong>{" "}
+                {screeningResult.recommendedFlow}
               </p>
             </div>
 
@@ -247,7 +260,7 @@ export default function BlurScreenerPage() {
                 className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white h-12"
                 onClick={goToRecommendedTest}
               >
-                {labelForRecommendedFlow(screeningResult.recommendedFlow)}
+                {labelForRecommendedFlowI18n(screeningResult.recommendedFlow, t)}
               </Button>
               {screeningResult.recommendedFlow !== RECOMMENDED_FLOW.FULL && (
                 <Button
@@ -255,7 +268,7 @@ export default function BlurScreenerPage() {
                   className="rounded-full h-12"
                   onClick={() => navigate(`/test/${TEST_IDS.COMPLETE}`)}
                 >
-                  Take full vision check anyway
+                  {t("blurScreener.fullCheckAnyway")}
                 </Button>
               )}
               <Button
@@ -263,7 +276,7 @@ export default function BlurScreenerPage() {
                 className="rounded-full h-11"
                 onClick={() => navigate("/test-selection")}
               >
-                Browse all tests
+                {t("blurScreener.browseAll")}
               </Button>
             </div>
           </div>
