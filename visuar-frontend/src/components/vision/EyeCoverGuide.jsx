@@ -1,9 +1,9 @@
 /**
  * EyeCoverGuide — Animated instructional screen shown before each eye's test.
  *
- * Shows a face with a skin-toned arm sweeping up from the shoulder to cover
- * the correct eye. The arm is clearly connected so the user understands they
- * should raise their own hand to block that eye.
+ * Shows a mirror-view face: one eye open (being tested), the other blocked by
+ * a same-side hand drawn at fixed SVG coordinates — no CSS transforms on SVG
+ * groups (those break in several browsers and left the hand at the shoulder).
  *
  * All animations use CSS keyframes on GPU-composited properties (transform,
  * opacity) — no Framer Motion, no 3D libraries.
@@ -20,40 +20,16 @@ import { VIEWING_DISTANCE } from "../../utils/viewingDistance";
 import { DistanceAcuityWarningCard } from "../DistanceAcuityWarningCard";
 import { EyeRestReminder } from "../EyeRestReminder";
 
-// ─── Keyframes ────────────────────────────────────────────────────────────────
-// "ecg-" prefix to avoid collisions.
-// Arm comes from below-right (for right eye) or below-left (for left eye),
-// holds clearly in place for ~70 % of the cycle, then descends.
+// ─── Keyframes (opacity / scale only — no CSS transform on SVG groups) ────────
 const KEYFRAMES = `
-  @keyframes ecg-arm-right {
-    0%,  4%   { transform: translate(60px, 120px); opacity: 0; }
-    15%, 82%  { transform: translate(0,     0);    opacity: 1; }
-    93%, 100% { transform: translate(60px, 120px); opacity: 0; }
-  }
-  @keyframes ecg-arm-left {
-    0%,  4%   { transform: translate(-60px, 120px); opacity: 0; }
-    15%, 82%  { transform: translate(0,      0);    opacity: 1; }
-    93%, 100% { transform: translate(-60px, 120px); opacity: 0; }
+  @keyframes ecg-cover-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.82; }
   }
 
-  /* Covered eye fades out as arm arrives, reappears as arm leaves */
-  @keyframes ecg-eye-out {
-    0%,  12%  { opacity: 1; }
-    20%, 84%  { opacity: 0; }
-    92%, 100% { opacity: 1; }
-  }
-
-  /* "COVER" badge next to the eye — pulses while arm is present */
-  @keyframes ecg-badge {
-    0%,  12%  { opacity: 0; }
-    20%, 84%  { opacity: 1; }
-    92%, 100% { opacity: 0; }
-  }
-
-  /* Gentle breathing on the whole SVG */
-  @keyframes ecg-breathe {
-    0%, 100% { transform: scale(1);     }
-    50%      { transform: scale(1.018); }
+  @keyframes ecg-open-eye-glow {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
   }
 
   /* Step-list slide-in on mount */
@@ -69,22 +45,22 @@ const KEYFRAMES = `
   }
 `;
 
-const CYCLE = "4.5s";
+const CYCLE = "2.8s";
 
 // ─── AnimatedFace ─────────────────────────────────────────────────────────────
 const AnimatedFace = memo(function AnimatedFace({ coverSide, isDarkMode }) {
-  // Mirror convention: LEFT_EYE_X = user's left eye on screen-left
+  // Mirror view — user's left eye is on screen-left (like a webcam).
   const LEFT_EYE_X  = 78;
   const RIGHT_EYE_X = 122;
-  const EYE_Y       = 84;
+  const EYE_Y       = 88;
 
-  const handX   = coverSide === "right" ? RIGHT_EYE_X : LEFT_EYE_X;
-  const armAnim = coverSide === "right" ? "ecg-arm-right" : "ecg-arm-left";
+  const coverEyeX = coverSide === "right" ? RIGHT_EYE_X : LEFT_EYE_X;
+  const isRightCover = coverSide === "right";
 
   // ── palette ──
   const skin      = isDarkMode ? "#4b5563" : "#fde9c8";
-  const skinMid   = isDarkMode ? "#374151" : "#f9c97e";   // slightly darker — arm
-  const skinDark  = isDarkMode ? "#1f2937" : "#e8a84e";   // knuckle lines
+  const skinMid   = isDarkMode ? "#374151" : "#f9c97e";
+  const skinDark  = isDarkMode ? "#1f2937" : "#e8a84e";
   const hair      = isDarkMode ? "#111827" : "#7c2d12";
   const brow      = isDarkMode ? "#9ca3af" : "#92400e";
   const eyeWhite  = isDarkMode ? "#e2e8f0" : "#ffffff";
@@ -94,12 +70,40 @@ const AnimatedFace = memo(function AnimatedFace({ coverSide, isDarkMode }) {
   const noseMouth = isDarkMode ? "#9ca3af" : "#b45309";
   const shirtC    = isDarkMode ? "#1e3a8a" : "#1d4ed8";
   const badgeTxt  = isDarkMode ? "#f87171" : "#dc2626";
-  const badgeBg   = isDarkMode ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.12)";
+  const badgeBg   = isDarkMode ? "rgba(239,68,68,0.18)" : "rgba(239,68,68,0.14)";
+  const testGlow  = isDarkMode ? "rgba(34,211,238,0.35)" : "rgba(6,182,212,0.28)";
 
-  // Forearm curve direction: for right cover the arm sweeps down-right; left → down-left
-  const armCurve = coverSide === "right"
-    ? "M 10 18 Q 36 68 58 108"   // down-right
-    : "M -10 18 Q -36 68 -58 108"; // down-left
+  const renderEye = (x, isOpen) => (
+    <g transform={`translate(${x}, ${EYE_Y})`}>
+      <path d="M -11 -17 Q 0 -23 11 -17" stroke={brow} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      {isOpen ? (
+        <>
+          <ellipse
+            rx="18"
+            ry="18"
+            fill="none"
+            stroke={testGlow}
+            strokeWidth="3"
+            style={{ animation: `ecg-open-eye-glow ${CYCLE} ease-in-out infinite` }}
+          />
+          <ellipse rx="12.5" ry="8.5" fill={eyeWhite} stroke={outline} strokeWidth="0.8" />
+          <circle r="6" fill={iris} />
+          <circle r="3.2" fill={pupilC} />
+          <circle cx="2.5" cy="-2" r="1.8" fill="rgba(255,255,255,0.85)" />
+        </>
+      ) : (
+        <>
+          <ellipse rx="12.5" ry="8.5" fill={eyeWhite} stroke={outline} strokeWidth="0.8" style={{ opacity: 0.35 }} />
+          <path d="M -12 0 Q 0 4 12 0" stroke={outline} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        </>
+      )}
+    </g>
+  );
+
+  // Forearm path in hand-local coords (hand origin = covered eye).
+  const forearm = isRightCover
+    ? "M 6 10 Q 24 48 42 86"
+    : "M -6 10 Q -24 48 -42 86";
 
   return (
     <svg
@@ -107,150 +111,99 @@ const AnimatedFace = memo(function AnimatedFace({ coverSide, isDarkMode }) {
       width="220"
       height="242"
       aria-hidden="true"
-      style={{
-        animation: `ecg-breathe ${CYCLE} ease-in-out infinite`,
-        willChange: "transform",
-        overflow: "visible",
-        display: "block",
-      }}
+      style={{ overflow: "visible", display: "block" }}
     >
-      {/* Soft glow disc behind head */}
       <circle
         cx="100" cy="98"
         r="76"
         fill={isDarkMode ? "rgba(56,189,248,0.07)" : "rgba(6,182,212,0.06)"}
       />
 
-      {/* ── Shirt + collar ── */}
+      {/* Shirt + collar */}
       <path
         d="M 22 242 Q 32 198 68 192 L 82 172 L 118 172 L 132 192 Q 168 198 178 242 Z"
         fill={shirtC}
       />
       <path d="M 82 172 L 100 184 L 118 172" fill={isDarkMode ? "#1e3a8a" : "#1e40af"} />
 
-      {/* ── Neck ── */}
       <rect x="86" y="152" width="28" height="22" rx="5" fill={skinMid} />
 
-      {/* ── Head ── */}
+      {/* Head */}
       <ellipse cx="100" cy="96" rx="52" ry="58" fill={skin} stroke={outline} strokeWidth="1.5" />
 
-      {/* ── Hair (clipPath keeps it to top half) ── */}
-      <defs>
-        <clipPath id="ecg-hair-clip">
-          <rect x="0" y="0" width="200" height="94" />
-        </clipPath>
-      </defs>
-      <ellipse
-        cx="100" cy="84"
-        rx="55" ry="56"
-        fill={hair}
-        clipPath="url(#ecg-hair-clip)"
-      />
-
-      {/* ── Ears ── */}
+      {/* Ears */}
       <ellipse cx="48"  cy="98" rx="7" ry="11" fill={skin} stroke={outline} strokeWidth="1.2" />
       <ellipse cx="152" cy="98" rx="7" ry="11" fill={skin} stroke={outline} strokeWidth="1.2" />
 
-      {/* ════ LEFT EYE (user's left, screen-left) ════ */}
-      <g
-        transform={`translate(${LEFT_EYE_X}, ${EYE_Y})`}
-        style={
-          coverSide === "left"
-            ? { animation: `ecg-eye-out ${CYCLE} ease-in-out infinite` }
-            : undefined
-        }
-      >
-        {/* eyebrow */}
-        <path d="M -11 -17 Q 0 -23 11 -17" stroke={brow} strokeWidth="2.5" fill="none" strokeLinecap="round" />
-        {/* white */}
-        <ellipse rx="12.5" ry="8.5" fill={eyeWhite} stroke={outline} strokeWidth="0.8" />
-        {/* iris */}
-        <circle r="6" fill={iris} />
-        {/* pupil */}
-        <circle r="3.2" fill={pupilC} />
-        {/* shine */}
-        <circle cx="2.5" cy="-2" r="1.8" fill="rgba(255,255,255,0.8)" />
-      </g>
+      {/* Hair — sits above brows only, never overlaps eyes */}
+      <path
+        d="M 46 72 Q 52 28 100 24 Q 148 28 154 72 Q 130 58 100 56 Q 70 58 46 72 Z"
+        fill={hair}
+        stroke={outline}
+        strokeWidth="1"
+      />
 
-      {/* ════ RIGHT EYE (user's right, screen-right) ════ */}
-      <g
-        transform={`translate(${RIGHT_EYE_X}, ${EYE_Y})`}
-        style={
-          coverSide === "right"
-            ? { animation: `ecg-eye-out ${CYCLE} ease-in-out infinite` }
-            : undefined
-        }
-      >
-        <path d="M -11 -17 Q 0 -23 11 -17" stroke={brow} strokeWidth="2.5" fill="none" strokeLinecap="round" />
-        <ellipse rx="12.5" ry="8.5" fill={eyeWhite} stroke={outline} strokeWidth="0.8" />
-        <circle r="6" fill={iris} />
-        <circle r="3.2" fill={pupilC} />
-        <circle cx="2.5" cy="-2" r="1.8" fill="rgba(255,255,255,0.8)" />
-      </g>
+      {/* Eyes: open = being tested, squinted = covered side (hand sits on top) */}
+      {renderEye(LEFT_EYE_X, coverSide === "right")}
+      {renderEye(RIGHT_EYE_X, coverSide === "left")}
 
-      {/* ── Nose ── */}
+      {/* Nose + mouth */}
       <path
         d="M 97 104 Q 93 116 96 121 Q 100 125 104 121 Q 107 116 103 104"
         fill="none" stroke={noseMouth} strokeWidth="1.6" strokeLinecap="round"
       />
-
-      {/* ── Mouth ── */}
       <path
         d="M 83 132 Q 100 144 117 132"
         fill="none" stroke={noseMouth} strokeWidth="2.2" strokeLinecap="round"
       />
 
-      {/* ════ ARM + HAND (animated, drawn on top of face) ════
-           The group is anchored at the eye being covered.
-           The forearm path curves down toward the shoulder.
-           The palm + fingers sit above the anchor. */}
-      <g
-        transform={`translate(${handX}, ${EYE_Y})`}
-        style={{
-          animation: `${armAnim} ${CYCLE} cubic-bezier(0.34,1.46,0.64,1) infinite`,
-          willChange: "transform, opacity",
-        }}
-      >
-        {/* Forearm (thick rounded stroke, skin-toned — looks like user's own arm) */}
+      {/* Hand + forearm — fixed at covered eye (SVG transform attribute, not CSS) */}
+      <g transform={`translate(${coverEyeX}, ${EYE_Y})`}>
         <path
-          d={armCurve}
+          d={forearm}
           stroke={skinMid}
-          strokeWidth="22"
+          strokeWidth="17"
           strokeLinecap="round"
           fill="none"
         />
-        {/* Forearm outline for depth */}
         <path
-          d={armCurve}
+          d={forearm}
           stroke={outline}
-          strokeWidth="23"
+          strokeWidth="18"
           strokeLinecap="round"
           fill="none"
-          style={{ opacity: 0.25 }}
+          style={{ opacity: 0.2 }}
         />
 
-        {/* Palm body — wide enough to visually cover the eye region */}
-        <rect x="-26" y="-14" width="52" height="38" rx="13" fill={skinMid} stroke={outline} strokeWidth="1.5" />
+        <g style={{ animation: `ecg-cover-pulse ${CYCLE} ease-in-out infinite` }}>
+          {/* Palm fully blocks the eye */}
+          <ellipse cx="0" cy="0" rx="26" ry="19" fill={skinMid} stroke={outline} strokeWidth="1.5" />
+          <ellipse cx="0" cy="1" rx="22" ry="15" fill={skin} />
 
-        {/* 4 Fingers (pointing away from palm, upward since arm is upright) */}
-        <rect x="-22" y="-54" width="11" height="42" rx="5.5" fill={skinMid} stroke={outline} strokeWidth="1.2" />
-        <rect x="-9"  y="-60" width="11" height="48" rx="5.5" fill={skinMid} stroke={outline} strokeWidth="1.2" />
-        <rect x="4"   y="-60" width="11" height="48" rx="5.5" fill={skinMid} stroke={outline} strokeWidth="1.2" />
-        <rect x="17"  y="-54" width="11" height="42" rx="5.5" fill={skinMid} stroke={outline} strokeWidth="1.2" />
-
-        {/* Knuckle line accents */}
-        <line x1="-16" y1="-15" x2="-16" y2="-9" stroke={skinDark} strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="-3"  y1="-15" x2="-3"  y2="-9" stroke={skinDark} strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="10"  y1="-15" x2="10"  y2="-9" stroke={skinDark} strokeWidth="1.5" strokeLinecap="round" />
-        <line x1="23"  y1="-15" x2="23"  y2="-9" stroke={skinDark} strokeWidth="1.5" strokeLinecap="round" />
+          {/* Fingers curl toward temple */}
+          {isRightCover ? (
+            <>
+              <rect x="12" y="-20" width="10" height="16" rx="5" fill={skinMid} stroke={outline} strokeWidth="1" />
+              <rect x="20" y="-24" width="9" height="20" rx="4.5" fill={skinMid} stroke={outline} strokeWidth="1" />
+              <rect x="27" y="-22" width="8" height="18" rx="4" fill={skinMid} stroke={outline} strokeWidth="1" />
+              <line x1="14" y1="-6" x2="14" y2="-2" stroke={skinDark} strokeWidth="1.2" strokeLinecap="round" />
+              <line x1="22" y1="-6" x2="22" y2="-2" stroke={skinDark} strokeWidth="1.2" strokeLinecap="round" />
+            </>
+          ) : (
+            <>
+              <rect x="-22" y="-20" width="10" height="16" rx="5" fill={skinMid} stroke={outline} strokeWidth="1" />
+              <rect x="-29" y="-24" width="9" height="20" rx="4.5" fill={skinMid} stroke={outline} strokeWidth="1" />
+              <rect x="-35" y="-22" width="8" height="18" rx="4" fill={skinMid} stroke={outline} strokeWidth="1" />
+              <line x1="-16" y1="-6" x2="-16" y2="-2" stroke={skinDark} strokeWidth="1.2" strokeLinecap="round" />
+              <line x1="-24" y1="-6" x2="-24" y2="-2" stroke={skinDark} strokeWidth="1.2" strokeLinecap="round" />
+            </>
+          )}
+        </g>
       </g>
 
-      {/* ── "COVER" badge — appears in sync with the arm ── */}
-      <g
-        transform={`translate(${handX}, ${EYE_Y - 30})`}
-        style={{ animation: `ecg-badge ${CYCLE} ease-in-out infinite` }}
-      >
-        <rect x="-22" y="-10" width="44" height="18" rx="9" fill={badgeBg} stroke={badgeTxt} strokeWidth="1" />
+      {/* COVER badge — directly above the blocked eye */}
+      <g transform={`translate(${coverEyeX}, ${EYE_Y - 34})`}>
+        <rect x="-24" y="-10" width="48" height="18" rx="9" fill={badgeBg} stroke={badgeTxt} strokeWidth="1.2" />
         <text
           x="0" y="3"
           textAnchor="middle"
@@ -258,13 +211,12 @@ const AnimatedFace = memo(function AnimatedFace({ coverSide, isDarkMode }) {
           fontWeight="bold"
           fill={badgeTxt}
           fontFamily="system-ui, sans-serif"
-          letterSpacing="0.5"
+          letterSpacing="0.6"
         >
           COVER
         </text>
       </g>
 
-      {/* ── Distance hint at bottom ── */}
       <text
         x="100" y="239"
         textAnchor="middle"
@@ -347,7 +299,7 @@ export const EyeCoverGuide = memo(function EyeCoverGuide({
           Cover Your <span className="text-red-500">{coverLabel}</span> Eye
         </h2>
         <p className={`mt-1 text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-          Watch the animation — then do the same before pressing Start
+          Match the pose below — then cover the same eye before pressing Start
         </p>
       </div>
 
