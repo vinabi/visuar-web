@@ -130,9 +130,9 @@ function CheckoutForm({ plan, onSuccess, onCancel, isDarkMode, t }) {
         </p>
       )}
 
-      <p className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+      {/* <p className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
         {t("pricing.testCardHint")}
-      </p>
+      </p> */}
 
       <div className="flex gap-3 pt-1">
         <button
