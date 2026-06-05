@@ -158,8 +158,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const token = session?.access_token;
     if (!token) {
-      setHistoryLoading(false);
-      setFetchError("not_authenticated");
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -211,7 +210,11 @@ export default function DashboardPage() {
           );
         }
       } catch (err) {
-        if (cancelled || err?.name === "AbortError") return;
+        if (cancelled) return;
+        if (err?.name === "AbortError") {
+          if (!cancelled) setFetchError("network_error");
+          return;
+        }
         console.error("[Dashboard] Network error fetching history:", err);
         if (!cancelled) setFetchError("network_error");
       } finally {
@@ -490,7 +493,7 @@ export default function DashboardPage() {
 
     } catch (err) {
       console.error("[VISUAR] Report generation failed:", err);
-      alert("Could not generate report. Make sure you are connected to the backend.");
+      alert(t("dashboard.reportConnectionError"));
     }
     setReportLoading(false);
   };
@@ -811,28 +814,12 @@ export default function DashboardPage() {
           ) : fetchError ? (
             <div className={`text-center py-10 sm:py-14 rounded-2xl border px-4 ${isDarkMode ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"}`}>
               <Eye className={`w-10 h-10 mx-auto mb-3 ${isDarkMode ? "text-red-400" : "text-red-500"}`} />
-              {fetchError === "not_authenticated" ? (
-                <>
-                  <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.notSignedIn")}</p>
-                  <p className={`text-sm mt-1 max-w-md mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    {t("dashboard.notSignedInDesc")}
-                  </p>
-                </>
-              ) : fetchError === "network_error" ? (
-                <>
-                  <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.backendOffline")}</p>
-                  <p className={`text-sm mt-1 max-w-md mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    {t("dashboard.backendOfflineDesc")}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.loadHistoryError")}</p>
-                  <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    {t("dashboard.loadHistoryErrorDesc", { error: fetchError })}
-                  </p>
-                </>
-              )}
+              <>
+                <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.backendOffline")}</p>
+                <p className={`text-sm mt-1 max-w-md mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                  {t("dashboard.backendOfflineDesc")}
+                </p>
+              </>
             </div>
 
           ) : testHistory.length === 0 ? (
