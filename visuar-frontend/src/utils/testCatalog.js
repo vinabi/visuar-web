@@ -48,7 +48,7 @@ const ALL_TESTS = [
   },
   {
     id: TEST_IDS.JAEGER,
-    badgeKey: "recommended",
+    badgeKey: "supportingTest",
     available: true,
     category: "core",
     planTier: "free",
@@ -149,11 +149,11 @@ const FAR_MAIN = [
 const FAR_SUPPORTING = [TEST_IDS.CONTRAST, TEST_IDS.COLOR_VISION];
 
 const NEAR_MAIN = [
+  TEST_IDS.REFRACTION_BATTERY,
   TEST_IDS.JAEGER,
   TEST_IDS.NEAR_FAR,
   TEST_IDS.SIMULATOR,
   TEST_IDS.DUOCHROME,
-  TEST_IDS.REFRACTION_BATTERY,
 ];
 const NEAR_SUPPORTING = [
   TEST_IDS.SNELLEN,

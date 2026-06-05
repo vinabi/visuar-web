@@ -13,6 +13,17 @@ function isCompleteAI(ai) {
   );
 }
 
+function hasPartialAI(ai) {
+  return (
+    (ai?.findings?.length ?? 0) > 0 ||
+    (ai?.recommendations?.length ?? 0) > 0 ||
+    Boolean(ai?.summary || ai?.screening?.summary_en)
+  );
+}
+
+const BACKGROUND_AI_DEFER_MS = 5000;
+const SESSION_POLL_MS = 400;
+
 /**
  * Fetches AI explanation on the results page when navigation state has no AI yet.
  */
@@ -88,22 +99,52 @@ export function useResultsAIAnalysis({
     const payload = buildResultsAIPayload(testType, { ...ctx, userProfile });
     if (!payload) return;
 
-    fetchedRef.current = true;
     let cancelled = false;
-    setAiLoading(true);
+    let deferTimer = null;
 
-    fetchAIAnalysis(payload.test_type || testType, payload, userProfile)
-      .then((data) => {
-        if (cancelled) return;
-        applyAIResult(data, { persist: true });
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setAiLoading(false);
-      });
+    const runFetch = () => {
+      if (cancelled || fetchedRef.current) return;
+      fetchedRef.current = true;
+      setAiLoading(true);
 
+      fetchAIAnalysis(payload.test_type || testType, payload, userProfile)
+        .then((data) => {
+          if (cancelled) return;
+          applyAIResult(data, { persist: true });
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!cancelled) setAiLoading(false);
+        });
+    };
+
+    // TestPage may already be fetching AI in the background — wait before duplicating the call.
+    if (persistSlug) {
+      try {
+        const raw = sessionStorage.getItem(`visuar_last_result_${persistSlug}`);
+        const stored = raw ? JSON.parse(raw) : null;
+        const hasResultData =
+          stored?.leftEye ||
+          stored?.rightEye ||
+          stored?.nearFarData ||
+          stored?.finalEstimate;
+        const missingAi = !hasPartialAI(stored?.aiAnalysis);
+        if (hasResultData && missingAi) {
+          deferTimer = setTimeout(runFetch, BACKGROUND_AI_DEFER_MS);
+          return () => {
+            cancelled = true;
+            if (deferTimer) clearTimeout(deferTimer);
+          };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    runFetch();
     return () => {
       cancelled = true;
+      if (deferTimer) clearTimeout(deferTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when test slug changes
   }, [testType, hasCompleteInitial, userProfile, persistSlug, enabled, autoFetch]);
@@ -119,8 +160,6 @@ export function useResultsAIAnalysis({
         const p = JSON.parse(raw);
         const stored = p?.aiAnalysis;
         if (!stored) return;
-        const ready =
-          stored.findings?.length > 0 && stored.recommendations?.length > 0;
         setAiAnalysis((prev) => ({
           ...prev,
           ...stored,
@@ -128,18 +167,22 @@ export function useResultsAIAnalysis({
           recommendations: stored.recommendations?.length
             ? stored.recommendations
             : prev.recommendations,
+          summary: stored.summary || prev.summary,
+          summary_ur: stored.summary_ur || prev.summary_ur,
         }));
-        if (ready) {
-          setHasCompleteAI(true);
-          setAiLoading(false);
-          fetchedRef.current = true;
+        if (hasPartialAI(stored)) {
+          setHasCompleteAI(isCompleteAI(stored));
+          if (isCompleteAI(stored)) {
+            setAiLoading(false);
+            fetchedRef.current = true;
+          }
         }
       } catch {
         /* ignore */
       }
     };
     poll();
-    const id = setInterval(poll, 1500);
+    const id = setInterval(poll, SESSION_POLL_MS);
     return () => clearInterval(id);
   }, [persistSlug, hasCompleteInitial, enabled]);
 

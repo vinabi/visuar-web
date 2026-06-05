@@ -1,11 +1,13 @@
 const FAR_STEPS = [
   { id: "snellen", label: "Acuity" },
+  { id: "astigmatism", label: "Astigmatism" },
   { id: "duochrome", label: "Duochrome" },
   { id: "simulator", label: "Refine" },
 ];
 
 const NEAR_STEPS = [
   { id: "jaeger", label: "Near acuity" },
+  { id: "astigmatism", label: "Astigmatism" },
   { id: "near_far", label: "Near–far" },
   { id: "duochrome", label: "Duochrome" },
   { id: "simulator", label: "Refine" },

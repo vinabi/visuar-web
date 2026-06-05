@@ -40,6 +40,10 @@ import { TestPrescriptionCard } from "../components/TestPrescriptionCard";
 import { enrichLegacyEyeEstimate, computeSingleDiopterD } from "../utils/finalEstimate";
 import { correctionModeLabel } from "../utils/correctionMode";
 import {
+  buildInstantFindings,
+  buildInstantRecommendations,
+} from "../utils/instantTestFindings";
+import {
   contrastAbilityLabel,
   contrastReliabilityLabel,
   buildContrastPlainMeaning,
@@ -499,8 +503,16 @@ export default function ResultsPage() {
 
   const aiLoading = fetchLoading || aiFetchLoading;
 
+  const instantSource =
+    isRefractionTest && refractionData
+      ? refractionData
+      : resultState || persistedState;
+  const instantFindings = buildInstantFindings(effectiveTestType, instantSource);
+  const instantRecommendations = buildInstantRecommendations(effectiveTestType, instantSource);
+
   // ── Effective result state for Snellen ───────────────────
   const effectiveResultState = effectiveSnellenState;
+  const effectiveJaegerState = resultState || persistedState;
 
   const dateStr = new Date(
     resultState?.timestamp || persistedState?.timestamp || fetchedRecord?.created_at || Date.now()
@@ -576,16 +588,22 @@ export default function ResultsPage() {
   function FindingsSection() {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
     const showDashboardGenerate = proAiEnabled && isNumericId && !hasCompleteAI;
-    const showAiContent = proAiEnabled && hasCompleteAI;
+    const aiFindings = aiAnalysis?.findings ?? [];
+    const aiRecs = aiAnalysis?.recommendations ?? [];
+    const hasAiFindings = aiFindings.length > 0;
+    const hasAiRecs = aiRecs.length > 0;
+    const showAiContent = proAiEnabled && (hasCompleteAI || hasAiFindings || hasAiRecs);
     const showAiLoading = proAiEnabled && !showDashboardGenerate && aiFetchLoading && !hasCompleteAI;
-    const showFindingsRecs = showAiContent || showAiLoading;
-    const displayFindings = showAiContent ? (aiAnalysis?.findings ?? []) : [];
-    const displayRecs = showAiContent ? (aiAnalysis?.recommendations ?? []) : [];
-    const aiSummary = showAiContent
-      ? aiAnalysis?.summary || aiAnalysis?.screening?.summary_en
-      : null;
-    const showFindingsSkeleton = showAiLoading;
-    const showRecsSkeleton = showAiLoading;
+    const showFindingsRecs =
+      showAiContent || showAiLoading || instantFindings.length > 0 || instantRecommendations.length > 0;
+    const displayFindings = hasAiFindings ? aiFindings : instantFindings;
+    const displayRecs = hasAiRecs ? aiRecs : instantRecommendations;
+    const aiSummary =
+      aiAnalysis?.summary || aiAnalysis?.screening?.summary_en || null;
+    const showFindingsSkeleton = showAiLoading && displayFindings.length === 0;
+    const showRecsSkeleton = showAiLoading && displayRecs.length === 0;
+    const enhancingWithAi =
+      showAiLoading && (instantFindings.length > 0 || instantRecommendations.length > 0);
 
     const generateAIButton = showDashboardGenerate ? (
       <div
@@ -679,10 +697,13 @@ export default function ResultsPage() {
                 >
                   <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
                   Key Findings
-                  {showFindingsSkeleton && (
+                  {enhancingWithAi && (
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" title="Enhancing with AI" />
+                  )}
+                  {showFindingsSkeleton && !enhancingWithAi && (
                     <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" />
                   )}
-                  {!showFindingsSkeleton && showAiContent && displayFindings.length > 0 && (
+                  {!showFindingsSkeleton && hasAiFindings && displayFindings.length > 0 && (
                     <span
                       className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
                         isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
@@ -726,7 +747,7 @@ export default function ResultsPage() {
                 >
                   <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
                   Recommendations
-                  {!showRecsSkeleton && showAiContent && displayRecs.length > 0 && (
+                  {!showRecsSkeleton && hasAiRecs && displayRecs.length > 0 && (
                     <span
                       className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
                         isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
@@ -1548,10 +1569,10 @@ export default function ResultsPage() {
   }
 
   // ── Jaeger near acuity ───────────────────────────────────
-  if (isJaegerTest && resultState?.leftEye) {
+  if (isJaegerTest && effectiveJaegerState?.leftEye) {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
-    const le = resultState.leftEye;
-    const re = resultState.rightEye;
+    const le = effectiveJaegerState.leftEye;
+    const re = effectiveJaegerState.rightEye;
     const formatJaegerEye = (eye) => {
       if (!eye?.acuity) return { main: "—", sub: "" };
       const main = eye.jaegerJ || eye.acuity;
@@ -1584,8 +1605,8 @@ export default function ResultsPage() {
           </div>
         </div>
         <TestPrescriptionCard
-          leftEye={resultState.leftEye}
-          rightEye={resultState.rightEye}
+          leftEye={effectiveJaegerState.leftEye}
+          rightEye={effectiveJaegerState.rightEye}
           isDarkMode={isDarkMode}
           title="Estimated prescription from this test"
         />

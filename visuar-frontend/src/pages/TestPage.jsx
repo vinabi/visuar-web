@@ -314,12 +314,12 @@ export default function TestPage() {
     (isAssessmentFlow &&
       (activeAssessmentStep === STEP.SNELLEN ||
         activeAssessmentStep === STEP.SCREENER_SNELLEN)) ||
-    (isRefractionBattery && refractionSubPhase === "snellen");
+    (isRefractionBattery && refractionSubPhase === "snellen" && snellenSubPhase === "acuity");
   const showJaegerEngine =
     (isJaegerTest && jaegerSubPhase === "acuity") ||
     (isAssessmentFlow &&
       (activeAssessmentStep === STEP.JAEGER || activeAssessmentStep === STEP.SCREENER_JAEGER)) ||
-    (isRefractionBattery && refractionSubPhase === "jaeger");
+    (isRefractionBattery && refractionSubPhase === "jaeger" && jaegerSubPhase === "acuity");
   const showNearFarEngine =
     isNearFarTest ||
     (isAssessmentFlow && activeAssessmentStep === STEP.NEAR_FAR) ||
@@ -337,7 +337,21 @@ export default function TestPage() {
     isDuochromeTest || (isRefractionBattery && refractionSubPhase === "duochrome");
   const showSimulatorEngine =
     isRefractionSimulatorTest || (isRefractionBattery && refractionSubPhase === "simulator");
-  const showAstigmatismEngine = isSnellenTest && snellenSubPhase === "astigmatism";
+  const showAstigmatismEngine =
+    (isSnellenTest && snellenSubPhase === "astigmatism") ||
+    (isJaegerTest && jaegerSubPhase === "astigmatism") ||
+    (isRefractionBattery &&
+      refractionSubPhase === "snellen" &&
+      snellenSubPhase === "astigmatism") ||
+    (isRefractionBattery &&
+      refractionSubPhase === "jaeger" &&
+      jaegerSubPhase === "astigmatism");
+  const refractionBatteryProgressStep =
+    isRefractionBattery && refractionSubPhase === "snellen" && snellenSubPhase === "astigmatism"
+      ? "astigmatism"
+      : isRefractionBattery && refractionSubPhase === "jaeger" && jaegerSubPhase === "astigmatism"
+        ? "astigmatism"
+        : refractionSubPhase;
   // Pre-check lock
   const lockStartRef = useRef(null);
   const [lockProgress, setLockProgress] = useState(0);
@@ -914,6 +928,8 @@ export default function TestPage() {
       setRefractionSubPhase(
         getVisionFocus() === VISION_FOCUS.NEAR ? "jaeger" : "snellen"
       );
+      setSnellenSubPhase("acuity");
+      setJaegerSubPhase("acuity");
     }
   }, [isDuochromeTest, isRefractionSimulatorTest, isRefractionBattery]);
 
@@ -1446,6 +1462,7 @@ export default function TestPage() {
   }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary, runPostTestAI]);
 
   const finalizeSnellenRef = useRef(null);
+  const finalizeJaegerRef = useRef(null);
 
   const handleAstigmatismComplete = useCallback(
     (result) => {
@@ -1457,7 +1474,7 @@ export default function TestPage() {
         allEqual: result.allEqual === true,
       };
 
-      if (isSnellenTest && snellenSubPhase === "astigmatism") {
+      const advanceEyeOrFinish = (onBothEyesDone) => {
         if (eye === "left") {
           testingEyeRef.current = "right";
           setTestingEye("right");
@@ -1465,16 +1482,65 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        finalizeSnellenRef.current?.();
+        onBothEyesDone();
+      };
+
+      if (isSnellenTest && snellenSubPhase === "astigmatism") {
+        advanceEyeOrFinish(() => finalizeSnellenRef.current?.());
         return;
       }
+
+      if (isJaegerTest && jaegerSubPhase === "astigmatism") {
+        advanceEyeOrFinish(() => finalizeJaegerRef.current?.());
+        return;
+      }
+
+      if (
+        isRefractionBattery &&
+        refractionSubPhase === "snellen" &&
+        snellenSubPhase === "astigmatism"
+      ) {
+        advanceEyeOrFinish(() => {
+          setSnellenSubPhase("acuity");
+          setRefractionSubPhase("duochrome");
+          setTestingEye("left");
+          setRefractionEngineKey((k) => k + 1);
+          setTestPhase("INSTRUCTION");
+        });
+        return;
+      }
+
+      if (
+        isRefractionBattery &&
+        refractionSubPhase === "jaeger" &&
+        jaegerSubPhase === "astigmatism"
+      ) {
+        advanceEyeOrFinish(() => {
+          setJaegerSubPhase("acuity");
+          setRefractionSubPhase("near_far");
+          setNonSnellenResetToken((t) => t + 1);
+          setTestingEye("left");
+          setTestPhase("INSTRUCTION");
+        });
+      }
     },
-    [isSnellenTest, snellenSubPhase]
+    [
+      isSnellenTest,
+      snellenSubPhase,
+      isJaegerTest,
+      jaegerSubPhase,
+      isRefractionBattery,
+      refractionSubPhase,
+    ]
   );
 
   useEffect(() => {
     finalizeSnellenRef.current = finalizeStandaloneSnellenResults;
   }, [finalizeStandaloneSnellenResults]);
+
+  useEffect(() => {
+    finalizeJaegerRef.current = finalizeStandaloneJaegerResults;
+  }, [finalizeStandaloneJaegerResults]);
 
   const resetForNextAssessmentStep = useCallback(() => {
     setTestingEye("left");
@@ -2267,10 +2333,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        setRefractionSubPhase("duochrome");
-        setTestingEye("left");
-        setRefractionEngineKey((k) => k + 1);
-        setTestPhase("INSTRUCTION");
+        beginAstigmatismPhase(setSnellenSubPhase);
         return;
       }
 
@@ -2442,10 +2505,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        setRefractionSubPhase("near_far");
-        setNonSnellenResetToken((t) => t + 1);
-        setTestingEye("left");
-        setTestPhase("INSTRUCTION");
+        beginAstigmatismPhase(setJaegerSubPhase);
         return;
       }
 
@@ -2467,7 +2527,7 @@ export default function TestPage() {
           setTestPhase("INSTRUCTION");
           return;
         }
-        void finalizeStandaloneJaegerResults();
+        beginAstigmatismPhase(setJaegerSubPhase);
         return;
       }
 
@@ -2523,6 +2583,7 @@ export default function TestPage() {
       correctionMode,
       finalizeStandaloneJaegerResults,
       applyJaegerEyeResult,
+      beginAstigmatismPhase,
     ]
   );
 
@@ -3385,7 +3446,7 @@ export default function TestPage() {
               )}
               {isRefractionBattery && testPhase === "TESTING" && (
                 <RefractionBatteryProgress
-                  currentStep={refractionSubPhase}
+                  currentStep={refractionBatteryProgressStep}
                   variant={refractionBatteryVariant}
                   isDarkMode={isDarkMode}
                 />

@@ -23,7 +23,7 @@
     "startBlurScreener": "Start Blur Screener",
     "screenerUnsure": "We'll quickly check both distance and near clarity, then recommend the right tests.",
     "screenerBoth": "Short distance and near checks will show whether to focus on far vision, near vision, or a full check.",
-    "batteryHint": "Best for a more reliable estimated eyesight number.",
+    "batteryHint": "Best for a full SPH, CYL, and AXIS estimate — includes acuity, astigmatism, duochrome, and simulator.",
     "startBlurScreenerBtn": "Start Blur Screener",
     "startNearBattery": "Start Full Near Vision Battery",
     "startDistanceBattery": "Start Full Distance Refraction Battery",
@@ -72,11 +72,11 @@
     "battery": {
       "near": {
         "title": "Full Near Vision Battery",
-        "description": "Near Eyesight Number, near–far switching, simulator, and duochrome for near blur."
+        "description": "Near acuity, astigmatism (CYL & axis), near–far switching, duochrome, and simulator for the most accurate near eyesight number."
       },
       "far": {
         "title": "Full Distance Refraction Battery",
-        "description": "Distance Eyesight Number, refraction simulator, and duochrome for distance blur."
+        "description": "Distance acuity, astigmatism (CYL & axis), duochrome, and simulator for the most accurate distance eyesight number."
       },
       "both": {
         "title": "Full Refraction Battery",
@@ -86,13 +86,13 @@
     "tests": {
       "snellen-acuity": {
         "title": "Distance Eyesight Number Test",
-        "description": "Checks how clearly you see letters and estimates your eyesight number. At the squint line, enter that row entirely incorrectly (no guessing) for an accurate result.",
-        "duration": "4 min"
+        "description": "Letter acuity plus astigmatism fan for SPH, CYL, and axis. At the squint line, enter that row entirely incorrectly (no guessing). For higher accuracy, use the Full Distance Refraction Battery.",
+        "duration": "6 min"
       },
       "jaeger-acuity": {
         "title": "Near Eyesight Number Test",
-        "description": "Near reading chart at 40 to 50 cm for phone, book, and laptop blur.",
-        "duration": "4 min"
+        "description": "Near reading chart at 40–50 cm plus astigmatism fan for SPH, CYL, and axis. For the most accurate near number, use the Full Near Vision Battery.",
+        "duration": "6 min"
       },
       "refraction-simulator": {
         "title": "Refraction Simulator",
@@ -106,8 +106,8 @@
       },
       "refraction-battery": {
         "title": "Full Refraction Battery",
-        "description": "Distance Eyesight Number, duochrome, and refraction simulator combined.",
-        "duration": "12 min"
+        "description": "Acuity, astigmatism, duochrome, and refraction simulator combined for a complete estimated prescription.",
+        "duration": "15 min"
       },
       "near-far-switching": {
         "title": "Near Far Switching",
