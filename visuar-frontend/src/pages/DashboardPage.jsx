@@ -830,7 +830,9 @@ export default function DashboardPage() {
               </div>
               <p className={`text-lg font-semibold ${isDarkMode ? "text-white" : "text-slate-800"}`}>{t("dashboard.noTestsYet")}</p>
               <p className={`text-sm mt-1 max-w-sm mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                {t("dashboard.noTestsDesc", { email: user?.email })}
+                {activePlanId === "free"
+                  ? t("dashboard.noTestsDescFree")
+                  : t("dashboard.noTestsDesc", { email: user?.email })}
               </p>
               <Link to="/test-selection" onClick={() => startNewScreeningSession()} className="inline-block mt-6">
                 <Button className="rounded-full px-6 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold shadow-lg">
@@ -840,9 +842,8 @@ export default function DashboardPage() {
               </Link>
             </div>
           ) : (() => {
-            const FREE_LIMIT = 3;
-            const visibleTests = activePlanId === "free" ? testHistory.slice(0, FREE_LIMIT) : testHistory;
-            const lockedCount = activePlanId === "free" ? Math.max(0, testHistory.length - FREE_LIMIT) : 0;
+            const visibleTests = activePlanId === "free" ? [] : testHistory;
+            const lockedCount = activePlanId === "free" ? testHistory.length : 0;
 
 
             return (
@@ -939,7 +940,7 @@ export default function DashboardPage() {
                           {t("dashboard.hiddenResults", { count: lockedCount })}
                         </p>
                         <p className={`text-xs sm:text-sm ${isDarkMode ? "text-amber-200/70" : "text-amber-700/80"}`}>
-                          {t("dashboard.upgradeHistoryHint", { defaultValue: "Upgrade to unlock your full test history" })}
+                          {t("dashboard.upgradeHistoryHint")}
                         </p>
                       </div>
                       <span className={`text-xs font-bold px-3 py-1.5 rounded-full shrink-0 ${isDarkMode ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "bg-amber-100 text-amber-800 border border-amber-300"}`}>

@@ -309,6 +309,12 @@ async def calibrate_vision(data: dict):
 @app.post("/api/test-results", response_model=TestResultResponse, status_code=status.HTTP_201_CREATED)
 async def save_test_result(payload: TestResultCreate, request: Request, db=Depends(get_db)):
     cur = await get_current_user(request, db)
+    plan = await get_user_plan(db, cur["db"].id)
+    if plan == "free":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Test result history requires a Basic or Pro plan.",
+        )
     result = await create_test_result(db, cur["db"].id, payload)
     name = _user_display_name(cur["supabase"], cur["db"])
     # Extract plain-text AI summary if stored as JSON

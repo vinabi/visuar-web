@@ -1,5 +1,5 @@
 /**
- * EyeCoverGuide — Animated instructional screen shown before each eye's test.
+ * EyeCoverGuide — Instructional screen shown before each eye's test.
  *
  * Shows a mirror-view face: one eye open (being tested), the other blocked by
  * a same-side hand drawn at fixed SVG coordinates — no CSS transforms on SVG
@@ -38,7 +38,6 @@ const KEYFRAMES = `
     to   { opacity: 1; transform: translateX(0);    }
   }
 
-  /* Button glow pulse */
   @keyframes ecg-glow {
     0%, 100% { box-shadow: 0 0 0 0    rgba(6,182,212,0.5); }
     50%      { box-shadow: 0 0 0 14px rgba(6,182,212,0);   }
@@ -313,10 +312,9 @@ export const EyeCoverGuide = memo(function EyeCoverGuide({
         />
       )}
 
-      {/* ── Body: face animation + steps ── */}
+      {/* ── Body: cover image + steps ── */}
       <div className="flex flex-col md:flex-row items-center md:items-start gap-8 w-full max-w-2xl">
 
-        {/* Face */}
         <div className="flex-shrink-0 flex flex-col items-center gap-2">
           <AnimatedFace coverSide={coverSide} isDarkMode={isDarkMode} />
 

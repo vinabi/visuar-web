@@ -52,6 +52,12 @@ export function useProAIExplanations() {
   return activePlanId === "pro";
 }
 
+/** Basic and Pro plans persist test results to the database; Free shows results only. */
+export function useCanPersistTestResults() {
+  const { activePlanId } = usePlan();
+  return activePlanId === "basic" || activePlanId === "pro";
+}
+
 /** Blurred stand-in so free users see the AI section shape without readable text. */
 export function AIExplanationPlaceholder({ isDarkMode }) {
   const line = isDarkMode ? "bg-slate-600/80" : "bg-slate-300";

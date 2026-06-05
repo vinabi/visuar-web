@@ -168,7 +168,7 @@
     "total": "Total",
     "freePlanTitle": "You're on the Free plan",
     "basicPlanTitle": "You're on the Basic plan",
-    "freePlanDesc": "Limited to {{count}} AI messages per conversation. Upgrade to Basic for 50 messages, or Pro for unlimited.",
+    "freePlanDesc": "Limited to {{count}} AI messages per conversation. Results are session-only — upgrade to Basic to save test history.",
     "basicPlanDesc": "Limited to {{count}} AI messages per conversation. Upgrade to Pro for unlimited messages, advanced analytics, and more.",
     "upgradeBasic": "Upgrade to Basic",
     "upgradePro": "Upgrade to Pro",
@@ -181,8 +181,10 @@
     "loadHistoryError": "Could not load history",
     "noTestsYet": "No tests yet",
     "noTestsDesc": "Logged in as {{email}}. Complete your first vision test to see results here.",
-    "hiddenResults_one": "{{count}} older result hidden — upgrade to see full history",
-    "hiddenResults_other": "{{count}} older results hidden — upgrade to see full history",
+    "noTestsDescFree": "Complete a vision test to view results in this session. Upgrade to Basic to save test history on your dashboard.",
+    "hiddenResults_one": "{{count}} saved result — upgrade to Basic to view on your dashboard",
+    "hiddenResults_other": "{{count}} saved results — upgrade to Basic to view on your dashboard",
+    "upgradeHistoryHint": "The Free plan does not include saved test history. Upgrade to Basic to access your results here.",
     "upgrade": "Upgrade",
     "generatingReport": "Generating…",
     "export": "Export",
@@ -301,32 +303,32 @@
       "fiveMessages": "5 messages",
       "fiftyMessages": "50 messages",
       "unlimited": "Unlimited",
-      "lastThree": "Last 3 results",
+      "sessionOnly": "Session only",
       "allResults": "All results"
     },
     "cardFeatures": {
       "free": {
         "ai5": "5 AI messages / conversation",
         "allTests": "All vision tests",
-        "last3": "Last 3 test results",
+        "sessionOnly": "Session-only results",
         "pdf": "PDF health report",
-        "noPriority": "Priority AI responses",
+        "noAiFindings": "AI findings & recommendations",
         "noAnalytics": "Advanced analytics"
       },
       "basic": {
         "ai50": "50 AI messages / conversation",
         "allTests": "All vision tests",
-        "fullHistory": "Full test history",
+        "fullHistory": "Saved test history",
         "pdf": "PDF health report",
-        "priority": "Priority AI responses",
+        "noAiFindings": "AI findings & recommendations",
         "noAnalytics": "Advanced analytics"
       },
       "pro": {
         "aiUnlimited": "Unlimited AI messages",
         "allTests": "All vision tests",
-        "fullHistory": "Full test history",
+        "fullHistory": "Saved test history",
         "pdf": "PDF health report",
-        "priority": "Priority AI responses",
+        "aiFindings": "AI findings & recommendations",
         "analytics": "Advanced analytics"
       }
     }

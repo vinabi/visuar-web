@@ -1,152 +1,59 @@
+import { PLANS } from "../context/PlanContext";
+
+function cap(planId) {
+  return PLANS[planId].capabilities;
+}
+
 /** Build translated pricing comparison rows for PricingPage. */
 export function buildPricingFeatures(t) {
   const cat = (key) => t(`pricing.categories.${key}`);
   const text = (key) => t(`pricing.values.${key}`);
 
+  const row = (labelKey, categoryKey, values) => ({
+    label: t(`pricing.features.${labelKey}`),
+    category: cat(categoryKey),
+    free: values.free,
+    basic: values.basic,
+    pro: values.pro,
+  });
+
   return [
-    {
-      label: t("pricing.features.aiMessages"),
-      free: text("fiveMessages"),
-      basic: text("fiftyMessages"),
-      pro: text("unlimited"),
-      category: cat("aiConsultant"),
-    },
-    {
-      label: t("pricing.features.aiProfile"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("aiConsultant"),
-    },
-    {
-      label: t("pricing.features.voiceInput"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("aiConsultant"),
-    },
-    {
-      label: t("pricing.features.aiTts"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("aiConsultant"),
-    },
-    {
-      label: t("pricing.features.priorityAi"),
-      free: false,
-      basic: true,
-      pro: true,
-      category: cat("aiConsultant"),
-    },
-    {
-      label: t("pricing.features.allTests"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("visionTesting"),
-    },
-    {
-      label: t("pricing.features.distanceContrast"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("visionTesting"),
-    },
-    {
-      label: t("pricing.features.refractionTests"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("visionTesting"),
-    },
-    {
-      label: t("pricing.features.fullBattery"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("visionTesting"),
-    },
-    {
-      label: t("pricing.features.testHistory"),
-      free: text("lastThree"),
-      basic: text("allResults"),
-      pro: text("allResults"),
-      category: cat("resultsReports"),
-    },
-    {
-      label: t("pricing.features.pdfReport"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("resultsReports"),
-    },
-    {
-      label: t("pricing.features.aiFindings"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("resultsReports"),
-    },
-    {
-      label: t("pricing.features.advancedAnalytics"),
-      free: false,
-      basic: false,
-      pro: true,
-      category: cat("resultsReports"),
-    },
-    {
-      label: t("pricing.features.multiLanguage"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("general"),
-    },
-    {
-      label: t("pricing.features.healthProfile"),
-      free: true,
-      basic: true,
-      pro: true,
-      category: cat("general"),
-    },
-    {
-      label: t("pricing.features.cancelAnytime"),
-      free: false,
-      basic: true,
-      pro: true,
-      category: cat("general"),
-    },
+    row("aiMessages", "aiConsultant", {
+      free: text(cap("free").messagesKey),
+      basic: text(cap("basic").messagesKey),
+      pro: text(cap("pro").messagesKey),
+    }),
+    row("aiProfile", "aiConsultant", { free: true, basic: true, pro: true }),
+    row("voiceInput", "aiConsultant", { free: true, basic: true, pro: true }),
+    row("aiTts", "aiConsultant", { free: true, basic: true, pro: true }),
+    row("allTests", "visionTesting", { free: true, basic: true, pro: true }),
+    row("distanceContrast", "visionTesting", { free: true, basic: true, pro: true }),
+    row("refractionTests", "visionTesting", { free: true, basic: true, pro: true }),
+    row("fullBattery", "visionTesting", { free: true, basic: true, pro: true }),
+    row("testHistory", "resultsReports", {
+      free: text(cap("free").testHistoryKey),
+      basic: text(cap("basic").testHistoryKey),
+      pro: text(cap("pro").testHistoryKey),
+    }),
+    row("pdfReport", "resultsReports", { free: true, basic: true, pro: true }),
+    row("aiFindings", "resultsReports", {
+      free: cap("free").canViewAIFindings,
+      basic: cap("basic").canViewAIFindings,
+      pro: cap("pro").canViewAIFindings,
+    }),
+    row("advancedAnalytics", "resultsReports", {
+      free: cap("free").hasAdvancedAnalytics,
+      basic: cap("basic").hasAdvancedAnalytics,
+      pro: cap("pro").hasAdvancedAnalytics,
+    }),
+    row("multiLanguage", "general", { free: true, basic: true, pro: true }),
+    row("healthProfile", "general", { free: true, basic: true, pro: true }),
+    row("cancelAnytime", "general", { free: false, basic: true, pro: true }),
   ];
 }
 
 export function buildPlanCardFeatures(planId, t) {
-  const defs = {
-    free: [
-      { key: "ai5", ok: true },
-      { key: "allTests", ok: true },
-      { key: "last3", ok: true },
-      { key: "pdf", ok: true },
-      { key: "noPriority", ok: false },
-      { key: "noAnalytics", ok: false },
-    ],
-    basic: [
-      { key: "ai50", ok: true },
-      { key: "allTests", ok: true },
-      { key: "fullHistory", ok: true },
-      { key: "pdf", ok: true },
-      { key: "priority", ok: true },
-      { key: "noAnalytics", ok: false },
-    ],
-    pro: [
-      { key: "aiUnlimited", ok: true },
-      { key: "allTests", ok: true },
-      { key: "fullHistory", ok: true },
-      { key: "pdf", ok: true },
-      { key: "priority", ok: true },
-      { key: "analytics", ok: true },
-    ],
-  };
-  return (defs[planId] || []).map(({ key, ok }) => ({
+  return (PLANS[planId]?.cardFeatures || []).map(({ key, ok }) => ({
     text: t(`pricing.cardFeatures.${planId}.${key}`),
     ok,
   }));
@@ -158,4 +65,8 @@ export function planDisplayName(planId, t) {
 
 export function planMessagesLabel(planId, t) {
   return t(`pricing.plans.${planId}.messages`);
+}
+
+export function restrictedHistoryLabel(t) {
+  return t("pricing.values.sessionOnly");
 }

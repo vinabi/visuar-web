@@ -23,6 +23,7 @@ import {
   buildPlanCardFeatures,
   planDisplayName,
   planMessagesLabel,
+  restrictedHistoryLabel,
 } from "../utils/pricingFeatures";
 import { LanguageSelector } from "@/components/LanguageSelector";
 
@@ -30,7 +31,7 @@ const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function FeatureValue({ value, isDarkMode, planId, lastThreeLabel }) {
+function FeatureValue({ value, isDarkMode, planId, restrictedLabel }) {
   if (value === true) {
     return <Check className="w-4 h-4 text-emerald-500 mx-auto" />;
   }
@@ -39,7 +40,7 @@ function FeatureValue({ value, isDarkMode, planId, lastThreeLabel }) {
   }
   const highlight =
     planId === "pro" ||
-    (planId === "basic" && value !== lastThreeLabel);
+    (planId === "basic" && value !== restrictedLabel);
   return (
     <span className={`text-xs font-semibold ${
       highlight
@@ -341,13 +342,13 @@ function ComparisonTable({ isDarkMode, activePlanId, features, t }) {
                       {f.label}
                     </td>
                     <td className="text-center py-3.5">
-                      <FeatureValue value={f.free} isDarkMode={isDarkMode} planId="free" lastThreeLabel={t("pricing.values.lastThree")} />
+                      <FeatureValue value={f.free} isDarkMode={isDarkMode} planId="free" restrictedLabel={restrictedHistoryLabel(t)} />
                     </td>
                     <td className="text-center py-3.5">
-                      <FeatureValue value={f.basic} isDarkMode={isDarkMode} planId="basic" lastThreeLabel={t("pricing.values.lastThree")} />
+                      <FeatureValue value={f.basic} isDarkMode={isDarkMode} planId="basic" restrictedLabel={restrictedHistoryLabel(t)} />
                     </td>
                     <td className="text-center py-3.5">
-                      <FeatureValue value={f.pro} isDarkMode={isDarkMode} planId="pro" lastThreeLabel={t("pricing.values.lastThree")} />
+                      <FeatureValue value={f.pro} isDarkMode={isDarkMode} planId="pro" restrictedLabel={restrictedHistoryLabel(t)} />
                     </td>
                   </tr>
                 )),

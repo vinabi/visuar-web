@@ -167,7 +167,7 @@
     "total": "کل",
     "freePlanTitle": "آپ مفت پلان پر ہیں",
     "basicPlanTitle": "آپ بنیادی پلان پر ہیں",
-    "freePlanDesc": "فی گفتگو {{count}} AI پیغامات۔ بنیادی: 50، پرو: لامحدود۔",
+    "freePlanDesc": "فی گفتگو {{count}} AI پیغامات۔ نتائج صرف سیشن میں — تاریخ محفوظ کرنے کے لیے بنیادی میں اپ گریڈ کریں۔",
     "basicPlanDesc": "فی گفتگو {{count}} AI پیغامات۔ پرو: لامحدود پیغامات اور تجزیہ۔",
     "upgradeBasic": "بنیادی میں اپ گریڈ",
     "upgradePro": "پرو میں اپ گریڈ",
@@ -180,8 +180,10 @@
     "loadHistoryError": "تاریخ لوڈ نہیں ہوئی",
     "noTestsYet": "ابھی کوئی ٹیسٹ نہیں",
     "noTestsDesc": "{{email}} — پہلا ٹیسٹ مکمل کریں۔",
-    "hiddenResults_one": "{{count}} پرانا نتیجہ چھپا — مکمل تاریخ کے لیے اپ گریڈ",
-    "hiddenResults_other": "{{count}} پرانے نتائج چھپے — مکمل تاریخ کے لیے اپ گریڈ",
+    "noTestsDescFree": "اس سیشن میں نتائج دیکھنے کے لیے ٹیسٹ مکمل کریں۔ ڈیش بورڈ پر تاریخ محفوظ کرنے کے لیے بنیادی میں اپ گریڈ کریں۔",
+    "hiddenResults_one": "{{count}} محفوظ نتیجہ — ڈیش بورڈ پر دیکھنے کے لیے بنیادی میں اپ گریڈ",
+    "hiddenResults_other": "{{count}} محفوظ نتائج — ڈیش بورڈ پر دیکھنے کے لیے بنیادی میں اپ گریڈ",
+    "upgradeHistoryHint": "مفت پلان میں محفوظ ٹیسٹ تاریخ نہیں۔ نتائج یہاں دیکھنے کے لیے بنیادی میں اپ گریڈ کریں۔",
     "loadHistoryErrorDesc": "غلطی: {{error}}۔ براؤزر کنسول چیک کریں۔",
     "upgrade": "اپ گریڈ",
     "generatingReport": "بن رہی ہے…",
@@ -301,32 +303,32 @@
       "fiveMessages": "۵ پیغامات",
       "fiftyMessages": "۵۰ پیغامات",
       "unlimited": "لامحدود",
-      "lastThree": "آخری ۳ نتائج",
+      "sessionOnly": "صرف سیشن",
       "allResults": "تمام نتائج"
     },
     "cardFeatures": {
       "free": {
         "ai5": "فی گفتگو ۵ AI پیغامات",
         "allTests": "تمام بینائی ٹیسٹ",
-        "last3": "آخری ۳ ٹیسٹ نتائج",
+        "sessionOnly": "صرف سیشن کے نتائج",
         "pdf": "PDF صحت رپورٹ",
-        "noPriority": "ترجیحی AI جواب",
+        "noAiFindings": "AI نتائج اور سفارشات",
         "noAnalytics": "جدید تجزیہ"
       },
       "basic": {
         "ai50": "فی گفتگو ۵۰ AI پیغامات",
         "allTests": "تمام بینائی ٹیسٹ",
-        "fullHistory": "مکمل ٹیسٹ تاریخ",
+        "fullHistory": "محفوظ ٹیسٹ تاریخ",
         "pdf": "PDF صحت رپورٹ",
-        "priority": "ترجیحی AI جواب",
+        "noAiFindings": "AI نتائج اور سفارشات",
         "noAnalytics": "جدید تجزیہ"
       },
       "pro": {
         "aiUnlimited": "لامحدود AI پیغامات",
         "allTests": "تمام بینائی ٹیسٹ",
-        "fullHistory": "مکمل ٹیسٹ تاریخ",
+        "fullHistory": "محفوظ ٹیسٹ تاریخ",
         "pdf": "PDF صحت رپورٹ",
-        "priority": "ترجیحی AI جواب",
+        "aiFindings": "AI نتائج اور سفارشات",
         "analytics": "جدید تجزیہ"
       }
     }

@@ -12,7 +12,7 @@ import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
-import { useProAIExplanations } from "../components/ProGatedAIContent";
+import { useProAIExplanations, useCanPersistTestResults } from "../components/ProGatedAIContent";
 
 import { PPICalibrator } from "../components/PPICalibrator";
 import { SnellenEngine } from "../components/SnellenEngine";
@@ -89,6 +89,7 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import {
   fetchAIAnalysis,
   mergeAIIntoPersistedResult,
+  saveAIAnalysisToDB,
 } from "../lib/aiAnalysis";
 import { onboardingAPI } from "../lib/api";
 
@@ -165,6 +166,7 @@ export default function TestPage() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const proAiEnabled = useProAIExplanations();
+  const canPersistResults = useCanPersistTestResults();
 
   const isMobileOrTablet = useIsMobileOrTablet();
 
@@ -307,6 +309,52 @@ export default function TestPage() {
       return aiData;
     },
     [session?.access_token, proAiEnabled]
+  );
+
+  const postTestResultToDb = useCallback(
+    async (body, timeoutMs = SAVE_RESULTS_TIMEOUT_MS) => {
+      if (!canPersistResults || !session?.access_token) return null;
+      try {
+        const saveRes = await fetchWithTimeout(
+          `${API_URL}/api/test-results`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              ai_findings: null,
+              ai_recommendations: null,
+              ai_summary: null,
+              ...body,
+            }),
+          },
+          timeoutMs
+        );
+        if (!saveRes.ok) {
+          const errBody = await saveRes.json().catch(() => ({}));
+          console.error(`[VISUAR] Save failed ${saveRes.status}:`, errBody);
+          return null;
+        }
+        return saveRes.json().catch(() => null);
+      } catch (err) {
+        console.error("[VISUAR] Test result save error:", err);
+        return null;
+      }
+    },
+    [canPersistResults, session]
+  );
+
+  const runAIAndPatchResult = useCallback(
+    async (resultId, apiTestType, buildPayload, options = {}) => {
+      if (!proAiEnabled || !resultId || !session?.access_token) return;
+      const aiData = await runPostTestAI(apiTestType, buildPayload, options);
+      if (aiData) {
+        await saveAIAnalysisToDB(resultId, aiData, session.access_token);
+      }
+    },
+    [proAiEnabled, runPostTestAI, session]
   );
 
   const showSnellenEngine =
@@ -453,6 +501,12 @@ export default function TestPage() {
       intervalRef.current = null;
     }
   }, []);
+
+  /** Stop camera immediately when the saving overlay starts (not on next render). */
+  const beginSaving = useCallback(() => {
+    stopCamera();
+    setIsSaving(true);
+  }, [stopCamera]);
 
   const requestCamera = useCallback(async () => {
     setCameraPermission("requesting");
@@ -766,48 +820,29 @@ export default function TestPage() {
   /** Save standalone refraction sub-tests without blocking the results screen. */
   const persistStandaloneRefractionToDb = useCallback(
     async (tid, payload) => {
-      if (!session?.access_token) return null;
       const left = payload.leftEye;
       const right = payload.rightEye;
       const overallScore = payload.overallScore ?? 70;
-      try {
-        const saveRes = await fetchWithTimeout(
-          `${API_URL}/api/test-results`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              test_type: tid,
-              left_eye_acuity: left?.acuity ?? null,
-              right_eye_acuity: right?.acuity ?? null,
-              left_eye_diopter: left?.sph ?? left?.diopter ?? null,
-              right_eye_diopter: right?.sph ?? right?.diopter ?? null,
-              overall_score: overallScore,
-              result_json: JSON.stringify({
-                left,
-                right,
-                raw: refractionBufferRef.current,
-                visionFocus: payload.visionFocus,
-                correctionMode: payload.correctionMode,
-              }),
-              ai_findings: null,
-              ai_recommendations: null,
-              ai_summary: null,
-            }),
-          },
-          STANDALONE_SAVE_TIMEOUT_MS
-        );
-        if (!saveRes.ok) return null;
-        return saveRes.json().catch(() => null);
-      } catch (err) {
-        console.error("[VISUAR] Standalone refraction save error:", err);
-        return null;
-      }
+      return postTestResultToDb(
+        {
+          test_type: tid,
+          left_eye_acuity: left?.acuity ?? null,
+          right_eye_acuity: right?.acuity ?? null,
+          left_eye_diopter: left?.sph ?? left?.diopter ?? null,
+          right_eye_diopter: right?.sph ?? right?.diopter ?? null,
+          overall_score: overallScore,
+          result_json: JSON.stringify({
+            left,
+            right,
+            raw: refractionBufferRef.current,
+            visionFocus: payload.visionFocus,
+            correctionMode: payload.correctionMode,
+          }),
+        },
+        STANDALONE_SAVE_TIMEOUT_MS
+      );
     },
-    [session]
+    [postTestResultToDb]
   );
 
   const finalizeStandaloneRefractionSubtest = useCallback(() => {
@@ -876,32 +911,32 @@ export default function TestPage() {
 
     offerResultsWithSessionSummary(`/results/${tid}`, payload);
 
-    void runPostTestAI(
-      tid.replace(/-/g, "_"),
-      () =>
-        buildGeminiScreeningPayload(null, {
-          screening_explanation: true,
-          test_type: tid.replace(/-/g, "_"),
-          correctionMode,
-          visionFocus,
-          refractionResult: {
-            leftSphereD: left.sph ?? left.diopter,
-            rightSphereD: right.sph ?? right.diopter,
-            leftCylinderD: left.cyl ?? 0,
-            rightCylinderD: right.cyl ?? 0,
-            leftAxis: left.axis,
-            rightAxis: right.axis,
-          },
-        }),
-      { slug: tid, navStateRef: pendingNavRef }
-    );
-
     void persistStandaloneRefractionToDb(tid, payload).then((saved) => {
-      if (!saved?.id || !pendingNavRef.current) return;
-      const nav = pendingNavRef.current;
-      nav.state = { ...nav.state, savedResultId: saved.id };
-      const slug = tid;
-      if (slug) persistTestResult(slug, nav.state);
+      if (!saved?.id) return;
+      if (pendingNavRef.current) {
+        pendingNavRef.current.state = { ...pendingNavRef.current.state, savedResultId: saved.id };
+        persistTestResult(tid, pendingNavRef.current.state);
+      }
+      void runAIAndPatchResult(
+        saved.id,
+        tid.replace(/-/g, "_"),
+        () =>
+          buildGeminiScreeningPayload(null, {
+            screening_explanation: true,
+            test_type: tid.replace(/-/g, "_"),
+            correctionMode,
+            visionFocus,
+            refractionResult: {
+              leftSphereD: left.sph ?? left.diopter,
+              rightSphereD: right.sph ?? right.diopter,
+              leftCylinderD: left.cyl ?? 0,
+              rightCylinderD: right.cyl ?? 0,
+              leftAxis: left.axis,
+              rightAxis: right.axis,
+            },
+          }),
+        { slug: tid, navStateRef: pendingNavRef }
+      );
     });
     } catch (err) {
       console.error("[VISUAR] Standalone refraction finalize error:", err);
@@ -917,7 +952,7 @@ export default function TestPage() {
     persistStandaloneRefractionToDb,
     navigate,
     stopCamera,
-    runPostTestAI,
+    runAIAndPatchResult,
   ]);
 
   // Refraction sub-phase when starting a standalone refraction test
@@ -949,7 +984,7 @@ export default function TestPage() {
   const finalizeRefractionResults = useCallback(async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
-    setIsSaving(true);
+    beginSaving();
 
     const visionFocus = getVisionFocus();
     const testMeta = getTestById(testId || "refraction-battery", t);
@@ -1042,67 +1077,53 @@ export default function TestPage() {
       singleTestWarning: finalEstimate.singleTestWarning,
     };
 
-    offerResultsWithSessionSummary(`/results/${tid}`, payload);
-
-    void runPostTestAI(
-      "refraction_battery",
-      () =>
-        buildGeminiScreeningPayload(finalEstimate, {
-          test_type: "refraction_battery",
-          refractionResult: {
-            leftSphereD: left.sph ?? left.diopter ?? null,
-            rightSphereD: right.sph ?? right.diopter ?? null,
-            leftCylinderD: left.cyl ?? 0,
-            rightCylinderD: right.cyl ?? 0,
-            leftAxis: left.axis ?? null,
-            rightAxis: right.axis ?? null,
-            leftAcuity: left.acuity ?? null,
-            rightAcuity: right.acuity ?? null,
-          },
-          testsCompleted: finalEstimate.testsUsed || [],
-        }),
-      { slug: tid, navStateRef: pendingNavRef }
-    ).then(async (aiData) => {
-      payload.aiAnalysis = aiData.aiAnalysis;
-      if (!session?.access_token) return;
-      try {
-        await fetch(`${API_URL}/api/test-results`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            test_type: tid,
-            left_eye_acuity: left.acuity,
-            right_eye_acuity: right.acuity,
-            left_eye_diopter: finalEstimate.leftEye?.sessionAverageDiopterD ?? left.sph,
-            right_eye_diopter: finalEstimate.rightEye?.sessionAverageDiopterD ?? right.sph,
-            overall_score: overallScore,
-            result_json: JSON.stringify({
-              left,
-              right,
-              raw: refractionBufferRef.current,
-              finalEstimate,
-              correctionMode,
-              visionFocus,
-            }),
-            ai_findings: aiData.ai_findings,
-            ai_recommendations: aiData.ai_recommendations,
-            ai_summary: aiData.ai_summary,
-          }),
-        });
-        persistTestResult(tid, payload);
-      } catch (err) {
-        console.error("[VISUAR] Refraction save error:", err);
-      }
+    const saved = await postTestResultToDb({
+      test_type: tid,
+      left_eye_acuity: left.acuity,
+      right_eye_acuity: right.acuity,
+      left_eye_diopter: finalEstimate.leftEye?.sessionAverageDiopterD ?? left.sph,
+      right_eye_diopter: finalEstimate.rightEye?.sessionAverageDiopterD ?? right.sph,
+      overall_score: overallScore,
+      result_json: JSON.stringify({
+        left,
+        right,
+        raw: refractionBufferRef.current,
+        finalEstimate,
+        correctionMode,
+        visionFocus,
+      }),
     });
+    if (saved?.id) {
+      payload.savedResultId = saved.id;
+      void runAIAndPatchResult(
+        saved.id,
+        "refraction_battery",
+        () =>
+          buildGeminiScreeningPayload(finalEstimate, {
+            test_type: "refraction_battery",
+            refractionResult: {
+              leftSphereD: left.sph ?? left.diopter ?? null,
+              rightSphereD: right.sph ?? right.diopter ?? null,
+              leftCylinderD: left.cyl ?? 0,
+              rightCylinderD: right.cyl ?? 0,
+              leftAxis: left.axis ?? null,
+              rightAxis: right.axis ?? null,
+              leftAcuity: left.acuity ?? null,
+              rightAcuity: right.acuity ?? null,
+            },
+            testsCompleted: finalEstimate.testsUsed || [],
+          }),
+        { slug: tid, navStateRef: pendingNavRef }
+      );
+    }
+
+    offerResultsWithSessionSummary(`/results/${tid}`, payload);
   }, [
-    session,
     testId,
     correctionMode,
     offerResultsWithSessionSummary,
-    runPostTestAI,
+    postTestResultToDb,
+    runAIAndPatchResult,
   ]);
 
   const advanceRefractionAfterEye = useCallback(() => {
@@ -1211,7 +1232,6 @@ export default function TestPage() {
 
   // ─── Save results to database ──────────────────────────
   const saveResultsToDB = useCallback(async (payload) => {
-    if (!session?.access_token) return;
     try {
       const leftScore = acuityToScore(payload.leftEye?.acuity);
       const rightScore = acuityToScore(payload.rightEye?.acuity);
@@ -1252,90 +1272,76 @@ export default function TestPage() {
       payload.visionFocus = visionFocus;
       payload.diopterDisclaimer = DIOPTER_ESTIMATE_DISCLAIMER;
 
-      const saveBody = {
-        test_type: testId || "snellen-acuity",
+      if (!canPersistResults) return;
+
+      const slug = testId || "snellen-acuity";
+      const saved = await postTestResultToDb({
+        test_type: slug,
         left_eye_acuity: payload.leftEye?.acuity || null,
         right_eye_acuity: payload.rightEye?.acuity || null,
         left_eye_diopter: payload.leftEye?.diopter || null,
         right_eye_diopter: payload.rightEye?.diopter || null,
         overall_score: overallScore,
-        ai_findings: null,
-        ai_recommendations: null,
-        ai_summary: null,
-      };
-
-      const saveRes = await fetchWithTimeout(
-        `${API_URL}/api/test-results`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify(saveBody),
-        },
-        SAVE_RESULTS_TIMEOUT_MS
-      );
-      if (!saveRes.ok) {
-        const errBody = await saveRes.json().catch(() => ({}));
-        console.error(`[VISUAR] Save failed ${saveRes.status}:`, errBody);
-        alert(`Warning: results could not be saved to your history (${saveRes.status}). Check that you are signed in.`);
-      } else {
-        const saved = await saveRes.json().catch(() => null);
-        if (saved?.id) payload.savedResultId = saved.id;
-        console.log("[VISUAR] Snellen results saved to DB.");
-      }
-
-      const slug = testId || "snellen-acuity";
-      void runPostTestAI(
-        "snellen_acuity",
-        () =>
-          buildGeminiScreeningPayload(finalEstimate, {
-            test_type: "snellen_acuity",
-            overall_score: overallScore,
-            snellenResult: {
-              leftAcuity: payload.leftEye?.acuity ?? null,
-              rightAcuity: payload.rightEye?.acuity ?? null,
-              leftSphereD: payload.leftEye?.sph ?? payload.leftEye?.diopter,
-              rightSphereD: payload.rightEye?.sph ?? payload.rightEye?.diopter,
-              leftCylinderD: payload.leftEye?.cyl,
-              rightCylinderD: payload.rightEye?.cyl,
-              leftAxis: payload.leftEye?.axis,
-              rightAxis: payload.rightEye?.axis,
-            },
-            fatigueSignals: {
-              fatigueLevel: payload.fatigueLevel ?? "None",
-              pauseCount: payload.pauseCount ?? 0,
-              consistencyScore: payload.consistencyScore ?? 100,
-              sessionStability: payload.sessionStability ?? 100,
-            },
-            reliabilitySignals: {
-              accuracy: payload.accuracy ?? 0,
-              consistencyScore: payload.consistencyScore ?? 100,
-            },
-          }),
-        { slug, navStateRef: pendingNavRef }
-      ).then((aiData) => {
-        payload.aiAnalysis = aiData.aiAnalysis;
+        result_json: JSON.stringify(payload),
       });
+      if (saved?.id) {
+        payload.savedResultId = saved.id;
+        console.log("[VISUAR] Snellen results saved to DB.");
+        void runAIAndPatchResult(
+          saved.id,
+          "snellen_acuity",
+          () =>
+            buildGeminiScreeningPayload(finalEstimate, {
+              test_type: "snellen_acuity",
+              overall_score: overallScore,
+              snellenResult: {
+                leftAcuity: payload.leftEye?.acuity ?? null,
+                rightAcuity: payload.rightEye?.acuity ?? null,
+                leftSphereD: payload.leftEye?.sph ?? payload.leftEye?.diopter,
+                rightSphereD: payload.rightEye?.sph ?? payload.rightEye?.diopter,
+                leftCylinderD: payload.leftEye?.cyl,
+                rightCylinderD: payload.rightEye?.cyl,
+                leftAxis: payload.leftEye?.axis,
+                rightAxis: payload.rightEye?.axis,
+              },
+              fatigueSignals: {
+                fatigueLevel: payload.fatigueLevel ?? "None",
+                pauseCount: payload.pauseCount ?? 0,
+                consistencyScore: payload.consistencyScore ?? 100,
+                sessionStability: payload.sessionStability ?? 100,
+              },
+              reliabilitySignals: {
+                accuracy: payload.accuracy ?? 0,
+                consistencyScore: payload.consistencyScore ?? 100,
+              },
+            }),
+          { slug, navStateRef: pendingNavRef }
+        );
+      } else if (session?.access_token) {
+        alert(
+          "Warning: results could not be saved to your history. Check that you are signed in."
+        );
+      }
     } catch (err) {
       const isTimeout = err?.name === "AbortError";
       console.error(
         `[VISUAR] Failed to save results${isTimeout ? " (timed out)" : ""}:`,
         err
       );
-      alert(
-        isTimeout
-          ? "Saving took too long — your results are still shown on the next screen. Check your connection and try again from the dashboard."
-          : "Warning: results could not be saved — backend may be offline."
-      );
+      if (canPersistResults) {
+        alert(
+          isTimeout
+            ? "Saving took too long — your results are still shown on the next screen. Check your connection and try again from the dashboard."
+            : "Warning: results could not be saved — backend may be offline."
+        );
+      }
     }
-  }, [session, testId, correctionMode, runPostTestAI]);
+  }, [canPersistResults, session, testId, correctionMode, postTestResultToDb, runAIAndPatchResult]);
 
   const finalizeStandaloneSnellenResults = useCallback(async () => {
     if (finishingRef.current) return;
     finishingRef.current = true;
-    setIsSaving(true);
+    beginSaving();
 
     const leftEye = buildEyeRxFromBuffer("left", "decimal");
     const rightEye = buildEyeRxFromBuffer("right", "decimal");
@@ -1398,7 +1404,7 @@ export default function TestPage() {
 
   const finalizeStandaloneJaegerResults = useCallback(async () => {
     finishingRef.current = true;
-    setIsSaving(true);
+    beginSaving();
     const visionFocus = getVisionFocus();
     const leftEye = enrichJaegerEyePayload("left");
     const rightEye = enrichJaegerEyePayload("right");
@@ -1424,42 +1430,68 @@ export default function TestPage() {
       );
     });
 
+    const overallScore = Math.round(
+      (acuityToScore(leftEye.acuity) + acuityToScore(rightEye.acuity)) / 2
+    );
     const payload = {
       leftEye,
       rightEye,
       timestamp: new Date().toISOString(),
       visionFocus,
       correctionMode,
+      overallScore,
     };
-    offerResultsWithSessionSummary("/results/jaeger-acuity", payload);
 
-    void runPostTestAI(
-      "jaeger_acuity",
-      () => ({
-        screening_explanation: true,
-        test_type: "jaeger_acuity",
-        correctionMode,
-        visionFocus,
-        leftEye: {
-          acuity: leftEye.acuity,
-          jaegerJ: leftEye.jaegerJ,
-          nearLevel: leftEye.nearLevel,
-          sphereD: leftEye.diopter ?? leftEye.sph,
-          cylinderD: leftEye.cyl ?? 0,
-          axis: leftEye.axis,
-        },
-        rightEye: {
-          acuity: rightEye.acuity,
-          jaegerJ: rightEye.jaegerJ,
-          nearLevel: rightEye.nearLevel,
-          sphereD: rightEye.diopter ?? rightEye.sph,
-          cylinderD: rightEye.cyl ?? 0,
-          axis: rightEye.axis,
-        },
-      }),
-      { slug: "jaeger-acuity", navStateRef: pendingNavRef }
-    );
-  }, [enrichJaegerEyePayload, correctionMode, offerResultsWithSessionSummary, runPostTestAI]);
+    try {
+      const saved = await postTestResultToDb({
+        test_type: "jaeger-acuity",
+        left_eye_acuity: leftEye.acuity ?? null,
+        right_eye_acuity: rightEye.acuity ?? null,
+        left_eye_diopter: leftEye.diopter ?? leftEye.sph ?? null,
+        right_eye_diopter: rightEye.diopter ?? rightEye.sph ?? null,
+        overall_score: overallScore,
+        result_json: JSON.stringify({ leftEye, rightEye, visionFocus, correctionMode }),
+      });
+      if (saved?.id) {
+        payload.savedResultId = saved.id;
+        void runAIAndPatchResult(
+          saved.id,
+          "jaeger_acuity",
+          () => ({
+            screening_explanation: true,
+            test_type: "jaeger_acuity",
+            correctionMode,
+            visionFocus,
+            leftEye: {
+              acuity: leftEye.acuity,
+              jaegerJ: leftEye.jaegerJ,
+              nearLevel: leftEye.nearLevel,
+              sphereD: leftEye.diopter ?? leftEye.sph,
+              cylinderD: leftEye.cyl ?? 0,
+              axis: leftEye.axis,
+            },
+            rightEye: {
+              acuity: rightEye.acuity,
+              jaegerJ: rightEye.jaegerJ,
+              nearLevel: rightEye.nearLevel,
+              sphereD: rightEye.diopter ?? rightEye.sph,
+              cylinderD: rightEye.cyl ?? 0,
+              axis: rightEye.axis,
+            },
+          }),
+          { slug: "jaeger-acuity", navStateRef: pendingNavRef }
+        );
+      }
+    } finally {
+      offerResultsWithSessionSummary("/results/jaeger-acuity", payload);
+    }
+  }, [
+    enrichJaegerEyePayload,
+    correctionMode,
+    offerResultsWithSessionSummary,
+    postTestResultToDb,
+    runAIAndPatchResult,
+  ]);
 
   const finalizeSnellenRef = useRef(null);
   const finalizeJaegerRef = useRef(null);
@@ -1560,7 +1592,7 @@ export default function TestPage() {
 
   const finalizeCompleteAssessment = useCallback(async () => {
     finishingRef.current = true;
-    setIsSaving(true);
+    beginSaving();
     const focus = getVisionFocus();
     const dist = completeResultsRef.current.distance;
     const near = completeResultsRef.current.near;
@@ -1607,49 +1639,37 @@ export default function TestPage() {
     };
     payload.finalEstimate = finalEstimate;
     payload.aiAnalysis = { findings: [], recommendations: [], summary: "" };
+
+    const saved = await postTestResultToDb({
+      test_type: "complete",
+      left_eye_acuity: dist.left?.acuity || near.left?.acuity || null,
+      right_eye_acuity: dist.right?.acuity || near.right?.acuity || null,
+      left_eye_diopter: dist.left?.diopter ?? null,
+      right_eye_diopter: dist.right?.diopter ?? null,
+      overall_score: overallScore,
+      result_json: JSON.stringify(payload),
+    });
+    if (saved?.id) {
+      payload.savedResultId = saved.id;
+      void runAIAndPatchResult(
+        saved.id,
+        "complete_assessment",
+        () =>
+          buildGeminiScreeningPayload(finalEstimate, {
+            test_type: "complete_assessment",
+            distanceAcuity: payload.distanceAcuity,
+            nearAcuity: payload.nearAcuity,
+            overall_score: overallScore,
+          }),
+        { slug: "complete" }
+      );
+    }
+
+    setIsSaving(false);
     persistTestResult("complete", payload);
     stopCamera();
     navigate("/results/complete", { state: payload });
-
-    void runPostTestAI(
-      "complete_assessment",
-      () =>
-        buildGeminiScreeningPayload(finalEstimate, {
-          test_type: "complete_assessment",
-          distanceAcuity: payload.distanceAcuity,
-          nearAcuity: payload.nearAcuity,
-          overall_score: overallScore,
-        }),
-      { slug: "complete" }
-    ).then(async (aiData) => {
-      payload.aiAnalysis = aiData.aiAnalysis;
-      persistTestResult("complete", payload);
-      if (!session?.access_token) return;
-      try {
-        await fetch(`${API_URL}/api/test-results`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            test_type: "complete",
-            left_eye_acuity: dist.left?.acuity || near.left?.acuity || null,
-            right_eye_acuity: dist.right?.acuity || near.right?.acuity || null,
-            left_eye_diopter: dist.left?.diopter ?? null,
-            right_eye_diopter: dist.right?.diopter ?? null,
-            overall_score: overallScore,
-            result_json: JSON.stringify(payload),
-            ai_findings: aiData.ai_findings,
-            ai_recommendations: aiData.ai_recommendations,
-            ai_summary: aiData.ai_summary,
-          }),
-        });
-      } catch (err) {
-        console.error("[VISUAR] Complete assessment save error:", err);
-      }
-    });
-  }, [session, navigate, stopCamera, correctionMode, runPostTestAI]);
+  }, [navigate, stopCamera, correctionMode, postTestResultToDb, runAIAndPatchResult]);
 
   const finishQuickScreenerRouting = useCallback(() => {
     const snellenPassed = screenerRef.current.snellenPassed;
@@ -1724,7 +1744,7 @@ export default function TestPage() {
 
       if (finishingRef.current) return;
       finishingRef.current = true;
-      setIsSaving(true);
+      beginSaving();
 
       contrastEyeResultsRef.current.right = contrastResults;
       const L = contrastEyeResultsRef.current.left || contrastResults;
@@ -1802,27 +1822,6 @@ export default function TestPage() {
         };
       };
 
-      const persistContrastAI = (aiData) => {
-        if (!session?.access_token) return;
-        fetch(`${API_URL}/api/test-results`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            test_type: "contrast-sensitivity",
-            overall_score: overallScore,
-            left_eye_acuity: null,
-            right_eye_acuity: null,
-            left_eye_diopter: null,
-            right_eye_diopter: null,
-            ai_findings: aiData.ai_findings,
-            ai_recommendations: aiData.ai_recommendations,
-            ai_summary: aiData.ai_summary,
-          }),
-        }).catch((err) => console.error("[VISUAR] Contrast save error:", err));
-      };
       if (isCompleteAssessment) {
         completeResultsRef.current.contrast = {
           ...mergedData,
@@ -1863,20 +1862,23 @@ export default function TestPage() {
         },
         timestamp: new Date().toISOString(),
       };
-      offerResultsWithSessionSummary("/results/contrast-sensitivity", payload);
-
-      void runPostTestAI("contrast_sensitivity", buildContrastAIPayload, {
-        slug: "contrast-sensitivity",
-        navStateRef: pendingNavRef,
-      }).then((aiData) => {
-        if (pendingNavRef.current?.state?.contrastData) {
-          pendingNavRef.current.state.contrastData.aiAnalysis = aiData.aiAnalysis;
-        }
-        persistContrastAI(aiData);
+      const saved = await postTestResultToDb({
+        test_type: "contrast-sensitivity",
+        overall_score: overallScore,
+        result_json: JSON.stringify(payload.contrastData),
       });
+      if (saved?.id) {
+        payload.savedResultId = saved.id;
+        void runAIAndPatchResult(
+          saved.id,
+          "contrast_sensitivity",
+          buildContrastAIPayload,
+          { slug: "contrast-sensitivity", navStateRef: pendingNavRef }
+        );
+      }
+      offerResultsWithSessionSummary("/results/contrast-sensitivity", payload);
     },
     [
-      session,
       testingEye,
       isCompleteAssessment,
       isQuickScreener,
@@ -1884,7 +1886,8 @@ export default function TestPage() {
       advanceAssessmentStep,
       offerResultsWithSessionSummary,
       correctionMode,
-      runPostTestAI,
+      postTestResultToDb,
+      runAIAndPatchResult,
     ]
   );
 
@@ -1901,7 +1904,7 @@ export default function TestPage() {
 
       if (finishingRef.current) return;
       finishingRef.current = true;
-      setIsSaving(true);
+      beginSaving();
 
       orientationEyeResultsRef.current.right = orientationResults;
       const L = orientationEyeResultsRef.current.left || orientationResults;
@@ -1967,39 +1970,34 @@ export default function TestPage() {
         orientationData: { ...mergedData, aiAnalysis: emptyAi },
         timestamp: new Date().toISOString(),
       };
+      const saved = await postTestResultToDb({
+        test_type: "orientation-discrimination",
+        overall_score: overallScore,
+        result_json: JSON.stringify(navState),
+      });
+      if (saved?.id) {
+        navState.savedResultId = saved.id;
+        void runAIAndPatchResult(
+          saved.id,
+          "orientation_discrimination",
+          buildOrientationPayload,
+          { slug: "orientation-discrimination" }
+        );
+      }
+      setIsSaving(false);
       persistTestResult("orientation-discrimination", navState);
       stopCamera();
       navigate(`/results/orientation-discrimination`, { state: navState });
-
-      void runPostTestAI("orientation_discrimination", buildOrientationPayload, {
-        slug: "orientation-discrimination",
-      }).then((aiData) => {
-        if (!session?.access_token) return;
-        fetch(`${API_URL}/api/test-results`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            test_type: "orientation-discrimination",
-            overall_score: overallScore,
-            ai_findings: aiData.ai_findings,
-            ai_recommendations: aiData.ai_recommendations,
-            ai_summary: aiData.ai_summary,
-          }),
-        }).catch((err) => console.error("[VISUAR] Orientation save error:", err));
-      });
     },
     [
-      session,
       navigate,
       stopCamera,
       testingEye,
       isCompleteAssessment,
       advanceAssessmentStep,
       correctionMode,
-      runPostTestAI,
+      postTestResultToDb,
+      runAIAndPatchResult,
     ]
   );
 
@@ -2017,7 +2015,7 @@ export default function TestPage() {
 
       if (finishingRef.current) return;
       finishingRef.current = true;
-      setIsSaving(true);
+      beginSaving();
 
       colorVisionEyeResultsRef.current.right = results;
       const L = colorVisionEyeResultsRef.current.left || results;
@@ -2055,46 +2053,39 @@ export default function TestPage() {
         correctionMode,
         visionFocus: getVisionFocus(),
       };
+      const saved = await postTestResultToDb({
+        test_type: "color-vision",
+        overall_score: merged.score,
+        result_json: JSON.stringify(navState),
+      });
+      if (saved?.id) {
+        navState.savedResultId = saved.id;
+        void runAIAndPatchResult(
+          saved.id,
+          "color_vision",
+          () => ({
+            test_type: "color_vision",
+            correctionMode,
+            visionFocus: getVisionFocus(),
+            overall_score: merged.score,
+            cvd_risk: merged.cvdRisk,
+            cvd_type: merged.cvdType,
+            accuracy: merged.accuracySc,
+            total_plates: merged.totalPlates,
+            level1_errors: merged.l1Errors,
+            level1_total: merged.l1Total,
+            leftEye: { score: L.score, cvdRisk: L.cvdRisk },
+            rightEye: { score: R.score, cvdRisk: R.cvdRisk },
+          }),
+          { slug: "color-vision" }
+        );
+      }
+      setIsSaving(false);
       persistTestResult("color-vision", navState);
       stopCamera();
       navigate(`/results/color-vision`, { state: navState });
-
-      void runPostTestAI(
-        "color_vision",
-        () => ({
-          test_type: "color_vision",
-          correctionMode,
-          visionFocus: getVisionFocus(),
-          overall_score: merged.score,
-          cvd_risk: merged.cvdRisk,
-          cvd_type: merged.cvdType,
-          accuracy: merged.accuracySc,
-          total_plates: merged.totalPlates,
-          level1_errors: merged.l1Errors,
-          level1_total: merged.l1Total,
-          leftEye: { score: L.score, cvdRisk: L.cvdRisk },
-          rightEye: { score: R.score, cvdRisk: R.cvdRisk },
-        }),
-        { slug: "color-vision" }
-      ).then((aiData) => {
-        if (!session?.access_token) return;
-        fetch(`${API_URL}/api/test-results`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            test_type: "color-vision",
-            overall_score: merged.score,
-            ai_findings: aiData.ai_findings,
-            ai_recommendations: aiData.ai_recommendations,
-            ai_summary: aiData.ai_summary,
-          }),
-        }).catch((err) => console.error("[VISUAR] Color vision save error:", err));
-      });
     },
-    [session, navigate, stopCamera, testingEye, correctionMode, runPostTestAI]
+    [navigate, stopCamera, testingEye, correctionMode, postTestResultToDb, runAIAndPatchResult]
   );
 
   // ─── Landolt C acuity completion (per-eye) ────────────
@@ -2110,7 +2101,7 @@ export default function TestPage() {
 
       if (finishingRef.current) return;
       finishingRef.current = true;
-      setIsSaving(true);
+      beginSaving();
 
       landoltEyeResultsRef.current.right = landoltResults;
       const L = landoltEyeResultsRef.current.left || landoltResults;
@@ -2159,52 +2150,40 @@ export default function TestPage() {
         correctionMode,
         visionFocus: getVisionFocus(),
       };
+      const saved = await postTestResultToDb({
+        test_type: "landolt-acuity",
+        overall_score: overallScore,
+        left_eye_acuity: String(L.decimalScore ?? ""),
+        right_eye_acuity: String(R.decimalScore ?? ""),
+        left_eye_diopter: L.estimatedDiopterD ?? L.estimatedSphereD,
+        right_eye_diopter: R.estimatedDiopterD ?? R.estimatedSphereD,
+        result_json: JSON.stringify({ left: L, right: R, merged: mergedData }),
+      });
+      if (saved?.id) {
+        navState.savedResultId = saved.id;
+        void runAIAndPatchResult(
+          saved.id,
+          "landolt_acuity",
+          () => ({
+            test_type: "landolt_acuity",
+            correctionMode,
+            visionFocus: getVisionFocus(),
+            landoltScore: overallScore,
+            leftEye: L,
+            rightEye: R,
+            leftDecimal: L.decimalScore,
+            rightDecimal: R.decimalScore,
+            fatigue: mergedData.fatigueLevel,
+          }),
+          { slug: "landolt-acuity" }
+        );
+      }
+      setIsSaving(false);
       persistTestResult("landolt-acuity", navState);
       stopCamera();
       navigate(`/results/landolt-acuity`, { state: navState });
-
-      void runPostTestAI(
-        "landolt_acuity",
-        () => ({
-          test_type: "landolt_acuity",
-          correctionMode,
-          visionFocus: getVisionFocus(),
-          landoltScore: overallScore,
-          leftEye: L,
-          rightEye: R,
-          leftDecimal: L.decimalScore,
-          rightDecimal: R.decimalScore,
-          fatigue: mergedData.fatigueLevel,
-        }),
-        { slug: "landolt-acuity" }
-      ).then((aiData) => {
-        if (!session?.access_token) return;
-        fetchWithTimeout(
-          `${API_URL}/api/test-results`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({
-              test_type: "landolt-acuity",
-              overall_score: overallScore,
-              left_eye_acuity: String(L.decimalScore ?? ""),
-              right_eye_acuity: String(R.decimalScore ?? ""),
-              left_eye_diopter: L.estimatedDiopterD ?? L.estimatedSphereD,
-              right_eye_diopter: R.estimatedDiopterD ?? R.estimatedSphereD,
-              result_json: JSON.stringify({ left: L, right: R, merged: mergedData }),
-              ai_findings: aiData.ai_findings,
-              ai_recommendations: aiData.ai_recommendations,
-              ai_summary: aiData.ai_summary,
-            }),
-          },
-          SAVE_RESULTS_TIMEOUT_MS
-        ).catch((err) => console.error("[VISUAR] Landolt save error:", err));
-      });
     },
-    [session, navigate, stopCamera, testingEye, correctionMode, runPostTestAI]
+    [navigate, stopCamera, testingEye, correctionMode, postTestResultToDb, runAIAndPatchResult]
   );
 
   // ─── Rapid Recognition test completion (per-eye) ────────
@@ -2220,7 +2199,7 @@ export default function TestPage() {
 
       if (finishingRef.current) return;
       finishingRef.current = true;
-      setIsSaving(true);
+      beginSaving();
 
       rapidEyeResultsRef.current.right = rapidResults;
       const L = rapidEyeResultsRef.current.left || rapidResults;
@@ -2267,49 +2246,42 @@ export default function TestPage() {
         correctionMode,
         visionFocus: getVisionFocus(),
       };
+      const saved = await postTestResultToDb({
+        test_type: "rapid-recognition",
+        overall_score: overallScore,
+        result_json: JSON.stringify(navState),
+      });
+      if (saved?.id) {
+        navState.savedResultId = saved.id;
+        void runAIAndPatchResult(
+          saved.id,
+          "rapid_recognition",
+          () => ({
+            test_type: "rapid_recognition",
+            correctionMode,
+            visionFocus: getVisionFocus(),
+            overall_score: overallScore,
+            accuracy_percent: mergedData.accuracy,
+            highest_level: mergedData.highestLevel,
+            fatigue: mergedData.fatigueLevel,
+          }),
+          { slug: "rapid-recognition" }
+        );
+      }
+      setIsSaving(false);
       persistTestResult("rapid-recognition", navState);
       stopCamera();
       navigate(`/results/rapid-recognition`, { state: navState });
-
-      void runPostTestAI(
-        "rapid_recognition",
-        () => ({
-          test_type: "rapid_recognition",
-          correctionMode,
-          visionFocus: getVisionFocus(),
-          overall_score: overallScore,
-          accuracy_percent: mergedData.accuracy,
-          highest_level: mergedData.highestLevel,
-          fatigue: mergedData.fatigueLevel,
-        }),
-        { slug: "rapid-recognition" }
-      ).then((aiData) => {
-        if (!session?.access_token) return;
-        fetch(`${API_URL}/api/test-results`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            test_type: "rapid-recognition",
-            overall_score: overallScore,
-            ai_findings: aiData.ai_findings,
-            ai_recommendations: aiData.ai_recommendations,
-            ai_summary: aiData.ai_summary,
-          }),
-        }).catch((err) => console.error("[VISUAR] Rapid save error:", err));
-      });
     },
     [
-      session,
       navigate,
       stopCamera,
       testingEye,
       isCompleteAssessment,
       advanceAssessmentStep,
       correctionMode,
-      runPostTestAI,
+      postTestResultToDb,
+      runAIAndPatchResult,
     ]
   );
 
@@ -2382,7 +2354,7 @@ export default function TestPage() {
         setTestPhase("INSTRUCTION");
       } else {
         finishingRef.current = true;
-        setIsSaving(true);
+        beginSaving();
 
         // Build full metrics from accumulated letter timings
         const allTimings = snellenLetterTimingsRef.current;
@@ -2422,8 +2394,11 @@ export default function TestPage() {
           levelProgression: snellenLevelProgressionRef.current,
         };
         console.log("[VISUAR] Test complete:", payload);
-        await saveResultsToDB(payload);
-        offerResultsWithSessionSummary(`/results/${testId || "snellen-acuity"}`, payload);
+        try {
+          await saveResultsToDB(payload);
+        } finally {
+          offerResultsWithSessionSummary(`/results/${testId || "snellen-acuity"}`, payload);
+        }
       }
     },
     [
@@ -2540,7 +2515,7 @@ export default function TestPage() {
         setTestPhase("INSTRUCTION");
       } else {
         finishingRef.current = true;
-        setIsSaving(true);
+        beginSaving();
         const visionFocus = getVisionFocus();
         ["left", "right"].forEach((eye) => {
           const eyeData = resultsRef.current[eye];
@@ -2568,7 +2543,41 @@ export default function TestPage() {
           visionFocus,
           correctionMode,
         };
-        offerResultsWithSessionSummary("/results/jaeger-acuity", payload);
+        void (async () => {
+          try {
+            const overallScore = Math.round(
+              (acuityToScore(payload.leftEye?.acuity) + acuityToScore(payload.rightEye?.acuity)) / 2
+            );
+            payload.overallScore = overallScore;
+            const saved = await postTestResultToDb({
+              test_type: "jaeger-acuity",
+              left_eye_acuity: payload.leftEye?.acuity ?? null,
+              right_eye_acuity: payload.rightEye?.acuity ?? null,
+              left_eye_diopter: payload.leftEye?.diopter ?? null,
+              right_eye_diopter: payload.rightEye?.diopter ?? null,
+              overall_score: overallScore,
+              result_json: JSON.stringify(payload),
+            });
+            if (saved?.id) {
+              payload.savedResultId = saved.id;
+              void runAIAndPatchResult(
+                saved.id,
+                "jaeger_acuity",
+                () => ({
+                  screening_explanation: true,
+                  test_type: "jaeger_acuity",
+                  correctionMode,
+                  visionFocus,
+                  leftEye: payload.leftEye,
+                  rightEye: payload.rightEye,
+                }),
+                { slug: "jaeger-acuity", navStateRef: pendingNavRef }
+              );
+            }
+          } finally {
+            offerResultsWithSessionSummary("/results/jaeger-acuity", payload);
+          }
+        })();
       }
     },
     [
@@ -2584,6 +2593,8 @@ export default function TestPage() {
       finalizeStandaloneJaegerResults,
       applyJaegerEyeResult,
       beginAstigmatismPhase,
+      postTestResultToDb,
+      runAIAndPatchResult,
     ]
   );
 
@@ -2649,23 +2660,33 @@ export default function TestPage() {
         visionFocus,
         correctionMode,
       };
-      persistTestResult("near-far-switching", payload);
-      navigate("/results/near-far-switching", { state: payload });
-
-      void runPostTestAI(
-        "near_far_switching",
-        () => ({
-          test_type: "near_far_switching",
-          correctionMode,
-          visionFocus,
-          nearFarResult: {
-            score: data.nearFarScore,
-            roundsPassed: data.roundsPassed,
-            totalRounds: data.totalRounds,
-          },
-        }),
-        { slug: "near-far-switching" }
-      );
+      void (async () => {
+        const saved = await postTestResultToDb({
+          test_type: "near-far-switching",
+          overall_score: data.nearFarScore ?? 0,
+          result_json: JSON.stringify(payload),
+        });
+        if (saved?.id) {
+          payload.savedResultId = saved.id;
+          void runAIAndPatchResult(
+            saved.id,
+            "near_far_switching",
+            () => ({
+              test_type: "near_far_switching",
+              correctionMode,
+              visionFocus,
+              nearFarResult: {
+                score: data.nearFarScore,
+                roundsPassed: data.roundsPassed,
+                totalRounds: data.totalRounds,
+              },
+            }),
+            { slug: "near-far-switching" }
+          );
+        }
+        persistTestResult("near-far-switching", payload);
+        navigate("/results/near-far-switching", { state: payload });
+      })();
     },
     [
       isAssessmentFlow,
@@ -2676,7 +2697,8 @@ export default function TestPage() {
       navigate,
       stopCamera,
       correctionMode,
-      runPostTestAI,
+      postTestResultToDb,
+      runAIAndPatchResult,
     ]
   );
 
@@ -2801,11 +2823,12 @@ export default function TestPage() {
     }
   }, [isTestPaused, testPhase]);
 
-  // Test complete / saving
+  // Test complete / saving — stop camera and play completion cue
   useEffect(() => {
     if (!isSaving) return;
+    stopCamera();
     speakInstruction("test_complete", langRef.current);
-  }, [isSaving]);
+  }, [isSaving, stopCamera]);
 
   // Distance / face guidance during camera setup — fires once per state change
   const lastDistVoiceRef = useRef(null);
