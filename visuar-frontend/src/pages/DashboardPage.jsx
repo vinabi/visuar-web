@@ -17,6 +17,9 @@ import {
   Crown,
   Zap,
   Lock,
+  ChevronRight,
+  Sparkles,
+  BarChart3,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
@@ -29,6 +32,89 @@ import { usePlan } from "../context/PlanContext";
 import { API_URL } from "../lib/config";
 import { startNewScreeningSession } from "../utils/screeningSession";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+
+const PLAN_META = {
+  free: { label: "Free", icon: Lock, accent: "amber" },
+  basic: { label: "Basic", icon: Zap, accent: "cyan" },
+  pro: { label: "Pro", icon: Crown, accent: "purple" },
+};
+
+function scoreTone(score) {
+  if (score >= 80) return "emerald";
+  if (score >= 50) return "cyan";
+  return "slate";
+}
+
+function StatCard({ isDarkMode, icon: Icon, badge, value, label, tone = "cyan", children }) {
+  const tones = {
+    cyan: isDarkMode
+      ? "from-cyan-500/10 to-blue-500/10 border-cyan-400/20 shadow-cyan-500/10"
+      : "from-cyan-50 to-blue-50 border-cyan-100",
+    blue: isDarkMode
+      ? "from-blue-500/10 to-indigo-500/10 border-blue-400/20 shadow-blue-500/10"
+      : "from-blue-50 to-indigo-50 border-blue-100",
+    emerald: isDarkMode
+      ? "from-green-500/10 to-emerald-500/10 border-green-400/20 shadow-green-500/10"
+      : "from-green-50 to-emerald-50 border-green-100",
+    rose: isDarkMode
+      ? "from-red-500/10 to-rose-500/10 border-red-400/20 shadow-red-500/10"
+      : "from-red-50 to-rose-50 border-red-100",
+    purple: isDarkMode
+      ? "from-purple-500/10 to-pink-500/10 border-purple-400/20 shadow-purple-500/10"
+      : "from-purple-50 to-pink-50 border-purple-100",
+  };
+  const iconBg = {
+    cyan: isDarkMode ? "bg-cyan-400/20 text-cyan-400" : "bg-cyan-500/15 text-cyan-600",
+    blue: isDarkMode ? "bg-blue-400/20 text-blue-400" : "bg-blue-500/15 text-blue-600",
+    emerald: isDarkMode ? "bg-green-400/20 text-green-400" : "bg-green-500/15 text-green-600",
+    rose: isDarkMode ? "bg-red-400/20 text-red-400" : "bg-red-500/15 text-red-600",
+    purple: isDarkMode ? "bg-purple-400/20 text-purple-400" : "bg-purple-500/15 text-purple-600",
+  };
+
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-2xl border p-4 sm:p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] bg-gradient-to-br shadow-md ${tones[tone]}`}
+    >
+      <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/5 blur-2xl" />
+      <div className="flex items-start justify-between gap-2 mb-3 sm:mb-4">
+        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center ${iconBg[tone]}`}>
+          <Icon className="w-5 h-5 sm:w-5 sm:h-5" />
+        </div>
+        {badge}
+      </div>
+      <div className={`text-2xl sm:text-3xl font-bold tracking-tight ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+        {value}
+      </div>
+      <div className={`text-xs sm:text-sm mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function HistorySkeleton({ isDarkMode }) {
+  return (
+    <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+      {[1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className={`rounded-2xl border p-4 sm:p-5 animate-pulse ${
+            isDarkMode ? "bg-slate-800/30 border-slate-700/50" : "bg-white border-slate-200"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`w-12 h-12 rounded-xl ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`} />
+            <div className="flex-1 space-y-2">
+              <div className={`h-4 w-2/3 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`} />
+              <div className={`h-3 w-1/3 rounded ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const { t, i18n } = useTranslation();
@@ -272,7 +358,7 @@ export default function DashboardPage() {
         const dateLabel = new Date(r.created_at).toLocaleDateString("en-US", {
           month: "short", day: "numeric", year: "numeric",
         });
-        const typeLabel = TEST_TYPE_LABELS[r.test_type] || r.test_type;
+        const typeLabel = testTypeLabel(r.test_type);
         const score     = r.overall_score ?? 0;
 
         // Estimate card height to decide if we need a new page
@@ -409,615 +495,494 @@ export default function DashboardPage() {
     setReportLoading(false);
   };
 
+  const planMeta = PLAN_META[activePlanId] || PLAN_META.free;
+  const PlanIcon = planMeta.icon;
+  const planBtnLabel =
+    activePlanId === "pro"
+      ? t("dashboard.changePlan", { defaultValue: "Change Plan" })
+      : activePlanId === "free"
+        ? t("dashboard.upgradeToBasic")
+        : t("dashboard.upgradeToPro");
+
+  const ghostBtn = isDarkMode
+    ? "text-slate-300 hover:text-white hover:bg-slate-800/50"
+    : "text-slate-700 hover:text-cyan-600 hover:bg-white/60";
+
+  const quickActions = [
+    {
+      to: "/test-selection",
+      label: t("dashboard.newTest"),
+      icon: Plus,
+      primary: true,
+      onClick: () => startNewScreeningSession(),
+    },
+    { to: "/profile", label: t("dashboard.profile"), icon: Eye },
+    { to: "/ai-consult", label: t("dashboard.aiConsult"), icon: Sparkles, accent: "fuchsia" },
+    { to: "/pricing", label: planBtnLabel, icon: Crown, accent: "amber" },
+  ];
+
   return (
     <div
-      className={`min-h-screen p-4 md:p-8 relative overflow-hidden transition-colors duration-300 ${
-        isDarkMode
-          ? "bg-[#0a0e27]"
-          : "bg-gradient-to-br from-blue-50 via-cyan-50 to-white"
+      className={`min-h-screen pb-24 sm:pb-8 px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6 relative overflow-x-hidden transition-colors duration-300 ${
+        isDarkMode ? "bg-[#0a0e27]" : "bg-gradient-to-br from-blue-50 via-cyan-50 to-white"
       }`}
     >
       <AnimatedBackground isDarkMode={isDarkMode} />
 
-      <div className="max-w-7xl mx-auto relative z-10 overflow-visible">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+      <div className="max-w-7xl mx-auto relative z-10 space-y-4 sm:space-y-6 overflow-visible">
+        {/* Top bar */}
+        <header className="flex items-center justify-between gap-2">
           <Link to="/">
-            <Button
-              variant="ghost"
-              className={`transition-colors ${
-                isDarkMode
-                  ? "text-slate-300 hover:text-white hover:bg-slate-800/50"
-                  : "text-slate-700 hover:text-cyan-600 hover:bg-white/60"
-              }`}
-            >
-              <ArrowLeft className="mr-2 w-4 h-4" />
-              {t("common.back")}
+            <Button variant="ghost" size="sm" className={`rounded-full ${ghostBtn}`}>
+              <ArrowLeft className="w-4 h-4 sm:mr-1" />
+              <span className="hidden sm:inline">{t("common.back")}</span>
             </Button>
           </Link>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <LanguageSelector isDarkMode={isDarkMode} />
             <Link to="/settings#easier-reading" title={t("settings.readingAssist")}>
-              <Button
-                variant="ghost"
-                className={`transition-colors ${
-                  isDarkMode
-                    ? "text-slate-300 hover:text-white hover:bg-slate-800/50"
-                    : "text-slate-700 hover:text-cyan-600 hover:bg-white/60"
-                }`}
-              >
-                <ZoomIn className="w-5 h-5" />
+              <Button variant="ghost" size="icon-sm" className={`rounded-full ${ghostBtn}`}>
+                <ZoomIn className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </Link>
             <Link to="/settings">
-              <Button
-                variant="ghost"
-                className={`transition-colors ${
-                  isDarkMode
-                    ? "text-slate-300 hover:text-white hover:bg-slate-800/50"
-                    : "text-slate-700 hover:text-cyan-600 hover:bg-white/60"
-                }`}
-              >
-                <Settings className="w-5 h-5" />
+              <Button variant="ghost" size="icon-sm" className={`rounded-full ${ghostBtn}`}>
+                <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
               </Button>
             </Link>
-            <Button
-              variant="ghost"
-              className={`transition-colors ${
-                isDarkMode
-                  ? "text-slate-300 hover:text-red-400 hover:bg-slate-800/50"
-                  : "text-slate-700 hover:text-red-600 hover:bg-white/60"
-              }`}
-              onClick={handleLogout}
-            >
-              <LogOut className="w-5 h-5" />
+            <Button variant="ghost" size="icon-sm" className={`rounded-full ${ghostBtn} hover:!text-red-400`} onClick={handleLogout}>
+              <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
             </Button>
           </div>
-        </div>
+        </header>
 
-        {/* Main Content Card */}
-        <div
-          className={`backdrop-blur-md rounded-3xl shadow-xl p-4 sm:p-8 md:p-12 transition-colors overflow-visible ${
+        {/* Hero */}
+        <section
+          className={`relative overflow-hidden rounded-3xl border p-5 sm:p-8 md:p-10 backdrop-blur-md shadow-xl ${
             isDarkMode
-              ? "bg-[#1a1f3a]/80 border border-slate-700/50"
-              : "bg-white/80 border border-white/40"
+              ? "bg-[#1a1f3a]/85 border-slate-700/50"
+              : "bg-white/85 border-white/60"
           }`}
         >
-          {/* Title Section */}
-          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-8 md:mb-10">
-            <div>
-              <h1
-                className={`text-2xl sm:text-4xl md:text-5xl font-bold mb-2 transition-colors ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {t("dashboard.title")}
-              </h1>
-              <p
-                className={`text-lg transition-colors ${
-                  isDarkMode ? "text-slate-300" : "text-slate-600"
-                }`}
-              >
-                {t("dashboard.welcome")},{" "}
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-500/8 via-transparent to-purple-500/8" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
                 <span
-                  className={`font-semibold transition-colors ${
-                    isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold border ${
+                    activePlanId === "pro"
+                      ? isDarkMode
+                        ? "bg-purple-500/15 border-purple-400/30 text-purple-300"
+                        : "bg-purple-50 border-purple-200 text-purple-700"
+                      : activePlanId === "basic"
+                        ? isDarkMode
+                          ? "bg-cyan-500/15 border-cyan-400/30 text-cyan-300"
+                          : "bg-cyan-50 border-cyan-200 text-cyan-700"
+                        : isDarkMode
+                          ? "bg-amber-500/15 border-amber-400/30 text-amber-300"
+                          : "bg-amber-50 border-amber-200 text-amber-700"
                   }`}
                 >
+                  <PlanIcon className="w-3.5 h-3.5" />
+                  {planMeta.label} Plan
+                </span>
+                {testHistory.length > 0 && (
+                  <span className={`text-xs ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                    {testHistory.length} test{testHistory.length !== 1 ? "s" : ""} recorded
+                  </span>
+                )}
+              </div>
+              <h1 className={`text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                {t("dashboard.title")}
+              </h1>
+              <p className={`mt-2 text-sm sm:text-lg ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+                {t("dashboard.welcome")},{" "}
+                <span className={`font-semibold ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`}>
                   {getUserName()}
                 </span>
               </p>
             </div>
-            <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
-              <Link
-                to="/test-selection"
-                className="flex-1 sm:flex-none"
-                onClick={() => startNewScreeningSession()}
+            {/* Desktop quick actions */}
+            <div className="hidden md:grid grid-cols-2 xl:grid-cols-4 gap-2 w-full lg:w-auto lg:min-w-[32rem]">
+              {quickActions.map((action) => (
+                <Link key={action.to} to={action.to} onClick={action.onClick}>
+                  <Button
+                    size="lg"
+                    className={`w-full h-12 rounded-2xl text-sm font-semibold transition-all ${
+                      action.primary
+                        ? isDarkMode
+                          ? "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white shadow-lg shadow-cyan-500/25"
+                          : "bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white shadow-lg shadow-cyan-500/20"
+                        : action.accent === "amber"
+                          ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-md shadow-amber-500/25"
+                          : action.accent === "fuchsia"
+                            ? isDarkMode
+                              ? "border border-fuchsia-400/30 text-fuchsia-300 bg-fuchsia-500/10 hover:bg-fuchsia-500/20"
+                              : "border border-fuchsia-200 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100"
+                            : isDarkMode
+                              ? "border border-cyan-400/30 text-cyan-300 bg-slate-800/40 hover:bg-slate-800/70"
+                              : "border border-cyan-200 text-cyan-700 bg-white hover:bg-cyan-50"
+                    }`}
+                  >
+                    <action.icon className="w-4 h-4" />
+                    {action.label}
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Mobile quick actions — horizontal scroll */}
+          <div className="md:hidden mt-5 -mx-1 px-1">
+            <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory scrollbar-none">
+              {quickActions.map((action) => (
+                <Link key={action.to} to={action.to} onClick={action.onClick} className="snap-start shrink-0">
+                  <Button
+                    size="lg"
+                    className={`h-11 px-4 rounded-2xl text-sm font-semibold whitespace-nowrap ${
+                      action.primary
+                        ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md"
+                        : action.accent === "amber"
+                          ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white"
+                          : isDarkMode
+                            ? "border border-slate-600 text-slate-200 bg-slate-800/60"
+                            : "border border-slate-200 text-slate-700 bg-white"
+                    }`}
+                  >
+                    <action.icon className="w-4 h-4" />
+                    {action.label}
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Stats */}
+        <section className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+          <StatCard
+            isDarkMode={isDarkMode}
+            icon={Eye}
+            tone={scoreTone(latestScore)}
+            badge={
+              <Badge className={isDarkMode ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-cyan-500 text-white"}>
+                {t("dashboard.latest")}
+              </Badge>
+            }
+            value={latestScore}
+            label={t("dashboard.latestScore")}
+          />
+          <StatCard
+            isDarkMode={isDarkMode}
+            icon={BarChart3}
+            tone="blue"
+            badge={
+              <Badge className={isDarkMode ? "bg-blue-500/20 text-blue-400 border-blue-500/30" : "bg-blue-500 text-white"}>
+                {t("dashboard.average")}
+              </Badge>
+            }
+            value={averageScore}
+            label={t("dashboard.averageScore")}
+          />
+          <StatCard
+            isDarkMode={isDarkMode}
+            icon={scoreImprovement >= 0 ? TrendingUp : TrendingDown}
+            tone={scoreImprovement >= 0 ? "emerald" : "rose"}
+            badge={
+              <Badge
+                className={
+                  scoreImprovement >= 0
+                    ? isDarkMode ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-green-500 text-white"
+                    : isDarkMode ? "bg-red-500/20 text-red-400 border-red-500/30" : "bg-red-500 text-white"
+                }
               >
-                <Button
-                  size="lg"
-                  className={`w-full sm:w-auto h-10 sm:h-14 px-4 sm:px-10 text-sm sm:text-lg text-white rounded-full shadow-lg hover:shadow-xl transition-all ${
-                    isDarkMode
-                      ? "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500"
-                      : "bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600"
-                  }`}
-                >
-                  <Plus className="mr-1 sm:mr-2 w-4 h-4 sm:w-5 sm:h-5" />
+                {testHistory.length >= 2 ? `${scoreImprovement >= 0 ? "+" : ""}${scoreImprovement}` : "—"}
+              </Badge>
+            }
+            value={testHistory.length >= 2 ? (scoreImprovement >= 0 ? t("dashboard.improvement") : t("dashboard.declining")) : "—"}
+            label={t("dashboard.status")}
+          />
+          <StatCard
+            isDarkMode={isDarkMode}
+            icon={Calendar}
+            tone="purple"
+            badge={
+              <Badge className={isDarkMode ? "bg-purple-500/20 text-purple-400 border-purple-500/30" : "bg-purple-500 text-white"}>
+                {t("dashboard.total")}
+              </Badge>
+            }
+            value={testHistory.length}
+            label={t("dashboard.testsCompleted")}
+          />
+        </section>
+
+        {/* Plan banner */}
+        {activePlanId !== "pro" ? (
+          <section
+            className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
+              isDarkMode
+                ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30"
+                : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
+            }`}
+          >
+            <div className={`p-3 rounded-xl shrink-0 ${isDarkMode ? "bg-amber-500/20" : "bg-amber-100"}`}>
+              <Crown className={`w-6 h-6 ${isDarkMode ? "text-amber-400" : "text-amber-600"}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-bold text-sm sm:text-base ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
+                {activePlanId === "free" ? t("dashboard.freePlanTitle") : t("dashboard.basicPlanTitle")}
+              </p>
+              <p className={`text-xs sm:text-sm mt-0.5 ${isDarkMode ? "text-amber-200/70" : "text-amber-700/80"}`}>
+                {activePlanId === "free"
+                  ? t("dashboard.freePlanDesc", { count: plan.maxMessages })
+                  : t("dashboard.basicPlanDesc", { count: plan.maxMessages })}
+              </p>
+            </div>
+            <Link to="/pricing" className="w-full sm:w-auto shrink-0">
+              <Button className="w-full sm:w-auto rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold shadow-md">
+                <Zap className="w-4 h-4" />
+                {activePlanId === "free" ? t("dashboard.upgradeBasic") : t("dashboard.upgradePro")}
+              </Button>
+            </Link>
+          </section>
+        ) : (
+          <section
+            className={`rounded-2xl border p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+              isDarkMode
+                ? "bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border-purple-500/25"
+                : "bg-gradient-to-r from-purple-50 to-cyan-50 border-purple-100"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`p-2.5 rounded-xl shrink-0 ${isDarkMode ? "bg-purple-500/20" : "bg-purple-100"}`}>
+                <Sparkles className={`w-5 h-5 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`} />
+              </div>
+              <div>
+                <p className={`font-bold text-sm sm:text-base ${isDarkMode ? "text-purple-200" : "text-purple-800"}`}>
+                  Pro plan active
+                </p>
+                <p className={`text-xs sm:text-sm ${isDarkMode ? "text-purple-300/70" : "text-purple-600/80"}`}>
+                  Unlimited AI, full history, and personalized analysis unlocked.
+                </p>
+              </div>
+            </div>
+            <Link to="/pricing" className="w-full sm:w-auto">
+              <Button variant="outline" className={`w-full sm:w-auto rounded-xl font-semibold ${isDarkMode ? "border-purple-400/40 text-purple-300 hover:bg-purple-500/10" : "border-purple-200 text-purple-700 hover:bg-purple-50"}`}>
+                {t("dashboard.changePlan", { defaultValue: "Change Plan" })}
+              </Button>
+            </Link>
+          </section>
+        )}
+
+        {/* Test History */}
+        <section
+          className={`rounded-3xl border p-4 sm:p-6 md:p-8 backdrop-blur-md shadow-xl ${
+            isDarkMode ? "bg-[#1a1f3a]/80 border-slate-700/50" : "bg-white/80 border-white/50"
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 sm:mb-6">
+            <div>
+              <h2 className={`text-xl sm:text-2xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                {t("dashboard.testHistory")}
+              </h2>
+              <p className={`text-xs sm:text-sm mt-0.5 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                Tap any result to view full analysis
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={reportLoading || testHistory.length === 0}
+              onClick={downloadReport}
+              className={`shrink-0 rounded-xl h-10 px-4 ${
+                isDarkMode
+                  ? "border-slate-600 text-slate-300 bg-slate-800/50 hover:bg-slate-700/50"
+                  : "border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
+              }`}
+            >
+              {reportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              <span className="hidden sm:inline">{reportLoading ? t("dashboard.generatingReport") : t("dashboard.downloadReport")}</span>
+              <span className="sm:hidden">{reportLoading ? "…" : t("dashboard.export")}</span>
+            </Button>
+          </div>
+
+          {historyLoading ? (
+            <HistorySkeleton isDarkMode={isDarkMode} />
+          ) : fetchError ? (
+            <div className={`text-center py-10 sm:py-14 rounded-2xl border px-4 ${isDarkMode ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"}`}>
+              <Eye className={`w-10 h-10 mx-auto mb-3 ${isDarkMode ? "text-red-400" : "text-red-500"}`} />
+              {fetchError === "not_authenticated" ? (
+                <>
+                  <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.notSignedIn")}</p>
+                  <p className={`text-sm mt-1 max-w-md mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("dashboard.notSignedInDesc")}
+                  </p>
+                </>
+              ) : fetchError === "network_error" ? (
+                <>
+                  <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.backendOffline")}</p>
+                  <p className={`text-sm mt-1 max-w-md mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("dashboard.backendOfflineDesc")}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className={`text-base sm:text-lg font-semibold ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.loadHistoryError")}</p>
+                  <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("dashboard.loadHistoryErrorDesc", { error: fetchError })}
+                  </p>
+                </>
+              )}
+            </div>
+
+          ) : testHistory.length === 0 ? (
+            <div className={`text-center py-12 sm:py-16 rounded-2xl border px-4 ${isDarkMode ? "border-slate-700/50 bg-slate-800/20" : "border-slate-200 bg-slate-50"}`}>
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${isDarkMode ? "bg-cyan-500/15" : "bg-cyan-100"}`}>
+                <Eye className={`w-8 h-8 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
+
+              </div>
+              <p className={`text-lg font-semibold ${isDarkMode ? "text-white" : "text-slate-800"}`}>{t("dashboard.noTestsYet")}</p>
+              <p className={`text-sm mt-1 max-w-sm mx-auto ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                {t("dashboard.noTestsDesc", { email: user?.email })}
+              </p>
+              <Link to="/test-selection" onClick={() => startNewScreeningSession()} className="inline-block mt-6">
+                <Button className="rounded-full px-6 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-bold shadow-lg">
+                  <Plus className="w-4 h-4" />
                   {t("dashboard.newTest")}
                 </Button>
               </Link>
-              <Link to="/profile" className="flex-1 sm:flex-none">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className={`w-full sm:w-auto h-10 sm:h-14 px-4 sm:px-8 text-sm sm:text-base rounded-full transition-all ring-2 ring-offset-2 ${
-                    isDarkMode
-                      ? "border-cyan-400/30 text-cyan-400 hover:bg-cyan-400/10 hover:border-cyan-400/50 bg-slate-800/30 ring-cyan-400/60 ring-offset-[#0a0e27]"
-                      : "border-cyan-500/20 text-cyan-600 hover:bg-cyan-500 hover:text-white hover:border-cyan-500 bg-transparent ring-cyan-500/40 ring-offset-white"
-                  }`}
-                >
-                  {t("dashboard.profile")}
-                </Button>
-              </Link>
-              <Link to="/ai-consult" className="flex-1 sm:flex-none">
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className={`w-full sm:w-auto h-10 sm:h-14 px-4 sm:px-8 text-sm sm:text-base rounded-full transition-all ring-2 ring-offset-2 ${
-                    isDarkMode
-                      ? "border-fuchsia-400/30 text-fuchsia-300 hover:bg-fuchsia-400/10 hover:border-fuchsia-400/50 bg-slate-800/30 ring-fuchsia-400/40 ring-offset-[#0a0e27]"
-                      : "border-fuchsia-500/20 text-fuchsia-700 hover:bg-fuchsia-500 hover:text-white hover:border-fuchsia-500 bg-transparent ring-fuchsia-500/40 ring-offset-white"
-                  }`}
-                >
-                  {t("dashboard.aiConsult")}
-                </Button>
-              </Link>
-              {activePlanId !== "pro" && (
-                <Link to="/pricing" className="flex-1 sm:flex-none">
-                  <Button
-                    size="lg"
-                    className="w-full sm:w-auto h-10 sm:h-14 px-4 sm:px-8 text-sm sm:text-base rounded-full transition-all bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-lg shadow-amber-500/30 hover:shadow-xl hover:shadow-amber-500/40"
-                  >
-                    <Crown className="mr-1.5 w-4 h-4 sm:w-5 sm:h-5" />
-                    {activePlanId === "free" ? t("dashboard.upgradeToBasic") : t("dashboard.upgradeToPro")}
-                  </Button>
-                </Link>
-              )}
             </div>
-          </div>
+          ) : (() => {
+            const FREE_LIMIT = 3;
+            const visibleTests = activePlanId === "free" ? testHistory.slice(0, FREE_LIMIT) : testHistory;
+            const lockedCount = activePlanId === "free" ? Math.max(0, testHistory.length - FREE_LIMIT) : 0;
 
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8 md:mb-10 overflow-visible">
-            <div
-              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
-                isDarkMode
-                  ? "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-cyan-400/20 shadow-lg shadow-cyan-500/10"
-                  : "bg-gradient-to-br from-cyan-50 to-blue-50 border-cyan-100 shadow-md"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2 sm:mb-4">
-                <div
-                  className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center ${
-                    isDarkMode ? "bg-cyan-400/20" : "bg-cyan-500/20"
-                  }`}
-                >
-                  <Eye
-                    className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                      isDarkMode ? "text-cyan-400" : "text-cyan-600"
-                    }`}
-                  />
-                </div>
-                <Badge
-                  className={`text-xs transition-all ${
-                    isDarkMode
-                      ? "bg-cyan-500/20 border-cyan-500/30 text-cyan-400 group-hover:bg-cyan-500 group-hover:text-white group-hover:border-black/20"
-                      : "bg-cyan-500 text-white group-hover:bg-cyan-600"
-                  }`}
-                >
-                  {t("dashboard.latest")}
-                </Badge>
-              </div>
-              <div
-                className={`text-xl sm:text-3xl font-bold mb-1 transition-colors ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {latestScore}
-              </div>
-              <div
-                className={`text-xs sm:text-sm transition-colors ${
-                  isDarkMode ? "text-slate-400" : "text-slate-600"
-                }`}
-              >
-                {t("dashboard.latestScore")}
-              </div>
-            </div>
 
-            <div
-              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
-                isDarkMode
-                  ? "bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border-blue-400/20 shadow-lg shadow-blue-500/10"
-                  : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 shadow-md"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2 sm:mb-4">
-                <div
-                  className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center ${
-                    isDarkMode ? "bg-blue-400/20" : "bg-blue-500/20"
-                  }`}
-                >
-                  <TrendingUp
-                    className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                      isDarkMode ? "text-blue-400" : "text-blue-600"
-                    }`}
-                  />
-                </div>
-                <Badge
-                  className={`text-xs transition-all ${
-                    isDarkMode
-                      ? "bg-blue-500/20 border-blue-500/30 text-blue-400 group-hover:bg-blue-500 group-hover:text-white group-hover:border-black/20"
-                      : "bg-blue-500 text-white group-hover:bg-blue-600"
-                  }`}
-                >
-                  {t("dashboard.average")}
-                </Badge>
-              </div>
-              <div
-                className={`text-xl sm:text-3xl font-bold mb-1 transition-colors ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {averageScore}
-              </div>
-              <div
-                className={`text-xs sm:text-sm transition-colors ${
-                  isDarkMode ? "text-slate-400" : "text-slate-600"
-                }`}
-              >
-                {t("dashboard.averageScore")}
-              </div>
-            </div>
-
-            <div
-              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
-                scoreImprovement >= 0
-                  ? isDarkMode
-                    ? "bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-400/20 shadow-lg shadow-green-500/10"
-                    : "bg-gradient-to-br from-green-50 to-emerald-50 border-green-100 shadow-md"
-                  : isDarkMode
-                  ? "bg-gradient-to-br from-red-500/10 to-rose-500/10 border-red-400/20 shadow-lg shadow-red-500/10"
-                  : "bg-gradient-to-br from-red-50 to-rose-50 border-red-100 shadow-md"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2 sm:mb-4">
-                <div
-                  className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center ${
-                    scoreImprovement >= 0
-                      ? isDarkMode
-                        ? "bg-green-400/20"
-                        : "bg-green-500/20"
-                      : isDarkMode
-                      ? "bg-red-400/20"
-                      : "bg-red-500/20"
-                  }`}
-                >
-                  {scoreImprovement >= 0 ? (
-                    <TrendingUp
-                      className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                        isDarkMode ? "text-green-400" : "text-green-600"
-                      }`}
-                    />
-                  ) : (
-                    <TrendingDown
-                      className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                        isDarkMode ? "text-red-400" : "text-red-600"
-                      }`}
-                    />
-                  )}
-                </div>
-                <Badge
-                  className={
-                    scoreImprovement >= 0
-                      ? isDarkMode
-                        ? "text-xs bg-green-500/20 border-green-500/30 text-green-400 group-hover:bg-green-500 group-hover:text-white group-hover:border-black/20 transition-all"
-                        : "text-xs bg-green-500 text-white group-hover:bg-green-600 transition-all"
-                      : isDarkMode
-                      ? "text-xs bg-red-500/20 border-red-500/30 text-red-400 group-hover:bg-red-500 group-hover:text-white group-hover:border-black/20 transition-all"
-                      : "text-xs bg-red-500 text-white group-hover:bg-red-600 transition-all"
-                  }
-                >
-                  {scoreImprovement >= 0
-                    ? `+${scoreImprovement}`
-                    : scoreImprovement}
-                </Badge>
-              </div>
-              <div
-                className={`text-base sm:text-3xl font-bold mb-1 transition-colors ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {scoreImprovement >= 0
-                  ? t("dashboard.improvement")
-                  : t("dashboard.declining")}
-              </div>
-              <div
-                className={`text-xs sm:text-sm transition-colors ${
-                  isDarkMode ? "text-slate-400" : "text-slate-600"
-                }`}
-              >
-                {t("dashboard.status")}
-              </div>
-            </div>
-
-            <div
-              className={`dashboard-hover-zoom group rounded-2xl p-3 sm:p-6 border ${
-                isDarkMode
-                  ? "bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-400/20 shadow-lg shadow-purple-500/10"
-                  : "bg-gradient-to-br from-purple-50 to-pink-50 border-purple-100 shadow-md"
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2 sm:mb-4">
-                <div
-                  className={`w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center ${
-                    isDarkMode ? "bg-purple-400/20" : "bg-purple-500/20"
-                  }`}
-                >
-                  <Calendar
-                    className={`w-4 h-4 sm:w-6 sm:h-6 ${
-                      isDarkMode ? "text-purple-400" : "text-purple-600"
-                    }`}
-                  />
-                </div>
-                <Badge
-                  className={`text-xs transition-all ${
-                    isDarkMode
-                      ? "bg-purple-500/20 border-purple-500/30 text-purple-400 group-hover:bg-purple-500 group-hover:text-white group-hover:border-black/20"
-                      : "bg-purple-500 text-white group-hover:bg-purple-600"
-                  }`}
-                >
-                  {t("dashboard.total")}
-                </Badge>
-              </div>
-              <div
-                className={`text-xl sm:text-3xl font-bold mb-1 transition-colors ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {testHistory.length}
-              </div>
-              <div
-                className={`text-xs sm:text-sm transition-colors ${
-                  isDarkMode ? "text-slate-400" : "text-slate-600"
-                }`}
-              >
-                {t("dashboard.testsCompleted")}
-              </div>
-            </div>
-          </div>
-
-          {/* Upgrade Banner — shown for Free and Basic plans */}
-          {activePlanId !== "pro" && (() => {
-            const isFree = activePlanId === "free";
-            const bannerTitle = isFree ? t("dashboard.freePlanTitle") : t("dashboard.basicPlanTitle");
-            const bannerDesc = isFree
-              ? t("dashboard.freePlanDesc", { count: plan.maxMessages })
-              : t("dashboard.basicPlanDesc", { count: plan.maxMessages });
-            const btnText = isFree ? t("dashboard.upgradeBasic") : t("dashboard.upgradePro");
             return (
-              <div className={`dashboard-hover-zoom-subtle mb-8 rounded-2xl border-2 p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 ${
-                isDarkMode
-                  ? "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500/30"
-                  : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200"
-              }`}>
-                <div className={`p-3 rounded-xl flex-shrink-0 ${isDarkMode ? "bg-amber-500/20" : "bg-amber-100"}`}>
-                  <Crown className={`w-6 h-6 ${isDarkMode ? "text-amber-400" : "text-amber-600"}`} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`font-bold text-base ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
-                    {bannerTitle}
-                  </p>
-                  <p className={`text-sm mt-0.5 ${isDarkMode ? "text-amber-200/70" : "text-amber-700/80"}`}>
-                    {bannerDesc}
-                  </p>
-                </div>
-                <Link to="/pricing" className="flex-shrink-0 w-full sm:w-auto">
-                  <button className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white shadow-md shadow-amber-500/30 transition-all">
-                    <Zap className="w-4 h-4" />
-                    {btnText}
-                  </button>
-                </Link>
+              <div className="grid gap-3 sm:gap-4 md:grid-cols-2">
+                {visibleTests.map((test) => (
+                  <Link
+                    key={test.id}
+                    to={`/results/${test.id}`}
+                    className={`group block rounded-2xl border p-4 sm:p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.99] ${
+                      isDarkMode
+                        ? "bg-slate-800/40 border-slate-700/50 hover:border-cyan-400/40"
+                        : "bg-white border-slate-200 hover:border-cyan-300 hover:shadow-cyan-100/50"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${isDarkMode ? "bg-cyan-400/15" : "bg-cyan-50"}`}>
+                          <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`font-semibold text-sm sm:text-base leading-snug line-clamp-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                            {test.type}
+                          </p>
+                          <p className={`text-xs sm:text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
+                            {new Date(test.date).toLocaleDateString(dateLocale, {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </p>
+                          {(test.left_acuity || test.right_acuity) && (
+                            <p className={`text-xs mt-2 truncate ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+                              {test.left_acuity && `L ${test.left_acuity}`}
+                              {test.left_acuity && test.right_acuity && " · "}
+                              {test.right_acuity && `R ${test.right_acuity}`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5 shrink-0">
+                        <div
+                          className={`text-2xl sm:text-3xl font-bold tabular-nums ${
+                            test.status === "excellent"
+                              ? isDarkMode ? "text-green-400" : "text-green-600"
+                              : test.status === "good"
+                                ? isDarkMode ? "text-cyan-400" : "text-cyan-600"
+                                : isDarkMode ? "text-slate-300" : "text-slate-600"
+                          }`}
+                        >
+                          {test.score}
+                        </div>
+                        <Badge
+                          className={
+                            test.status === "excellent"
+                              ? isDarkMode ? "bg-green-500/20 text-green-400 border-green-500/30" : "bg-green-500 text-white"
+                              : test.status === "good"
+                                ? isDarkMode ? "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" : "bg-cyan-500 text-white"
+                                : isDarkMode ? "bg-slate-500/20 text-slate-400 border-slate-500/30" : "bg-slate-500 text-white"
+                          }
+                        >
+                          {statusLabel(test.status)}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className={`mt-4 pt-3 border-t flex items-center justify-between text-xs font-semibold ${isDarkMode ? "border-slate-700/60 text-cyan-400" : "border-slate-100 text-cyan-600"}`}>
+                      <span>{t("dashboard.viewDetails")}</span>
+                      <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                  </Link>
+                ))}
+
+                {lockedCount > 0 && (
+                  <Link
+                    to="/pricing"
+                    className={`relative md:col-span-2 rounded-2xl border overflow-hidden min-h-[7rem] transition-all hover:shadow-md ${
+                      isDarkMode
+                        ? "bg-slate-800/20 border-amber-500/30 hover:border-amber-400/50"
+                        : "bg-amber-50/80 border-amber-200 hover:border-amber-300"
+                    }`}
+                  >
+                    <div className="absolute inset-0 p-4 blur-[3px] pointer-events-none select-none opacity-60">
+                      <div className="grid md:grid-cols-2 gap-3">
+                        {[1, 2].map((i) => (
+                          <div key={i} className={`h-20 rounded-xl ${isDarkMode ? "bg-slate-700/50" : "bg-slate-200/80"}`} />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="relative flex flex-col sm:flex-row items-center justify-center gap-3 p-6 text-center sm:text-left">
+                      <div className={`p-2.5 rounded-full ${isDarkMode ? "bg-amber-500/80" : "bg-amber-500"}`}>
+                        <Lock className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-sm sm:text-base font-bold ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
+                          {t("dashboard.hiddenResults", { count: lockedCount })}
+                        </p>
+                        <p className={`text-xs sm:text-sm ${isDarkMode ? "text-amber-200/70" : "text-amber-700/80"}`}>
+                          {t("dashboard.upgradeHistoryHint", { defaultValue: "Upgrade to unlock your full test history" })}
+                        </p>
+                      </div>
+                      <span className={`text-xs font-bold px-3 py-1.5 rounded-full shrink-0 ${isDarkMode ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "bg-amber-100 text-amber-800 border border-amber-300"}`}>
+                        {t("dashboard.upgrade")}
+                      </span>
+                    </div>
+                  </Link>
+                )}
+
               </div>
             );
           })()}
+        </section>
+      </div>
 
-          {/* Test History */}
-          <div>
-            <div className="flex justify-between items-center mb-4 sm:mb-6 gap-2">
-              <h2
-                className={`text-xl sm:text-2xl font-bold transition-colors ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                {t("dashboard.testHistory")}
-              </h2>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={reportLoading || testHistory.length === 0}
-                onClick={downloadReport}
-                className={`shrink-0 transition-colors ${
-                  isDarkMode
-                    ? "border-slate-600 text-slate-300 bg-slate-800/50 hover:bg-slate-700/50"
-                    : "border-slate-300 text-slate-700 bg-transparent"
-                }`}
-              >
-                {reportLoading
-                  ? <Loader2 className="mr-1 sm:mr-2 w-4 h-4 animate-spin" />
-                  : <Download className="mr-1 sm:mr-2 w-4 h-4" />}
-                <span className="hidden sm:inline">
-                  {reportLoading ? t("dashboard.generatingReport") : t("dashboard.downloadReport")}
-                </span>
-                <span className="sm:hidden">{reportLoading ? "…" : t("dashboard.export")}</span>
-              </Button>
-            </div>
 
-            <div className="space-y-4 overflow-visible py-1">
-              {historyLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className={`w-8 h-8 animate-spin ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
-                  <span className={`ml-3 text-lg ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.loadingHistory")}</span>
-                </div>
-              ) : fetchError ? (
-                <div className={`text-center py-12 rounded-xl border ${isDarkMode ? "border-red-500/30 bg-red-500/10" : "border-red-200 bg-red-50"}`}>
-                  <Eye className={`w-10 h-10 mx-auto mb-3 ${isDarkMode ? "text-red-400" : "text-red-400"}`} />
-                  {fetchError === "not_authenticated" ? (
-                    <>
-                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.notSignedIn")}</p>
-                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.notSignedInDesc")}</p>
-                    </>
-                  ) : fetchError === "network_error" ? (
-                    <>
-                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.backendOffline")}</p>
-                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.backendOfflineDesc")}</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className={`text-lg font-medium ${isDarkMode ? "text-red-400" : "text-red-600"}`}>{t("dashboard.loadHistoryError")}</p>
-                      <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                        {t("dashboard.loadHistoryErrorDesc", { error: fetchError })}
-                      </p>
-                    </>
-                  )}
-                </div>
-              ) : testHistory.length === 0 ? (
-                <div className={`text-center py-12 rounded-xl border ${isDarkMode ? "border-slate-700/50 bg-slate-800/20" : "border-slate-200 bg-slate-50"}`}>
-                  <Eye className={`w-10 h-10 mx-auto mb-3 ${isDarkMode ? "text-slate-600" : "text-slate-300"}`} />
-                  <p className={`text-lg font-medium ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>{t("dashboard.noTestsYet")}</p>
-                  <p className={`text-sm mt-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>{t("dashboard.noTestsDesc", { email: user?.email })}</p>
-                </div>
-              ) : (() => {
-                const FREE_LIMIT = 3;
-                const visibleTests = activePlanId === "free"
-                  ? testHistory.slice(0, FREE_LIMIT)
-                  : testHistory;
-                const lockedCount = activePlanId === "free"
-                  ? Math.max(0, testHistory.length - FREE_LIMIT)
-                  : 0;
+      {/* Mobile sticky CTA */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 z-20 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div
+          className={`mx-auto max-w-lg rounded-2xl border p-2 shadow-2xl backdrop-blur-xl ${
+            isDarkMode ? "bg-[#1a1f3a]/95 border-slate-700/60" : "bg-white/95 border-slate-200"
+          }`}
+        >
+          <Link to="/test-selection" onClick={() => startNewScreeningSession()} className="block">
+            <Button className="w-full h-12 rounded-xl text-base font-bold bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg">
+              <Plus className="w-5 h-5" />
+              {t("dashboard.newTest")}
+            </Button>
+          </Link>
 
-                return (
-                  <>
-                    {visibleTests.map((test) => (
-                      <div
-                        key={test.id}
-                        className={`dashboard-hover-zoom-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-xl border ${
-                          isDarkMode
-                            ? "bg-slate-800/30 border-slate-700/50 hover:border-cyan-400/50 hover:bg-slate-800/50"
-                            : "bg-white border-slate-200 hover:border-cyan-300"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                          <div
-                            className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                              isDarkMode ? "bg-cyan-400/20" : "bg-cyan-100"
-                            }`}
-                          >
-                            <Eye
-                              className={`w-5 h-5 sm:w-6 sm:h-6 ${
-                                isDarkMode ? "text-cyan-400" : "text-cyan-600"
-                              }`}
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <div
-                              className={`font-semibold text-sm sm:text-base truncate transition-colors ${
-                                isDarkMode ? "text-white" : "text-slate-900"
-                              }`}
-                            >
-                              {test.type}
-                            </div>
-                            <div
-                              className={`text-xs sm:text-sm transition-colors ${
-                                isDarkMode ? "text-slate-400" : "text-slate-600"
-                              }`}
-                            >
-                              {new Date(test.date).toLocaleDateString(dateLocale, {
-                                month: "long",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4">
-                          <div className="text-left sm:text-right">
-                            <div
-                              className={`text-xl sm:text-2xl font-bold transition-colors ${
-                                isDarkMode ? "text-white" : "text-slate-900"
-                              }`}
-                            >
-                              {test.score}
-                            </div>
-                            <Badge
-                              className={
-                                test.status === "excellent"
-                                  ? isDarkMode
-                                    ? "bg-green-500/20 border-green-500/30 text-green-400 transition-all"
-                                    : "bg-green-500 text-white transition-all"
-                                  : test.status === "good"
-                                  ? isDarkMode
-                                    ? "bg-cyan-500/20 border-cyan-500/30 text-cyan-400 transition-all"
-                                    : "bg-cyan-500 text-white transition-all"
-                                  : isDarkMode
-                                  ? "bg-slate-500/20 border-slate-500/30 text-slate-400 transition-all"
-                                  : "bg-slate-500 text-white transition-all"
-                              }
-                            >
-                              {statusLabel(test.status)}
-                            </Badge>
-                          </div>
-                          <Link to={`/results/${test.id}`}>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className={`transition-all ${
-                                isDarkMode
-                                  ? "border-cyan-400/30 text-cyan-400 hover:bg-cyan-400/10 hover:border-slate-700/50 hover:shadow-md bg-transparent"
-                                  : "border-cyan-300 text-cyan-600 hover:bg-cyan-500 hover:text-white hover:border-cyan-500 bg-transparent"
-                              }`}
-                            >
-                              {t("dashboard.viewDetails")}
-                            </Button>
-                          </Link>
-                        </div>
-                      </div>
-                    ))}
-
-                    {/* Locked history rows for free plan */}
-                    {lockedCount > 0 && (
-                      <Link
-                        to="/pricing"
-                        className={`dashboard-hover-zoom-subtle relative flex items-center justify-between gap-3 p-4 sm:p-5 rounded-xl border overflow-hidden group ${
-                          isDarkMode
-                            ? "bg-slate-800/20 border-amber-500/30 hover:border-amber-400/60"
-                            : "bg-amber-50/60 border-amber-200 hover:border-amber-400"
-                        }`}
-                      >
-                        {/* Blurred fake rows */}
-                        <div className="flex-1 blur-sm pointer-events-none select-none space-y-2.5">
-                          {Array.from({ length: Math.min(lockedCount, 2) }).map((_, i) => (
-                            <div key={i} className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-xl flex-shrink-0 ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`} />
-                              <div className="flex-1 space-y-1.5">
-                                <div className={`h-3 w-32 rounded ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`} />
-                                <div className={`h-2.5 w-20 rounded ${isDarkMode ? "bg-slate-800" : "bg-slate-100"}`} />
-                              </div>
-                              <div className={`h-7 w-16 rounded-lg ${isDarkMode ? "bg-slate-700" : "bg-slate-200"}`} />
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Lock overlay */}
-                        <div className="absolute inset-0 flex items-center justify-center gap-3">
-                          <div className={`p-2 rounded-full ${isDarkMode ? "bg-amber-500/80" : "bg-amber-500"}`}>
-                            <Lock className="w-4 h-4 text-white" />
-                          </div>
-                          <span className={`text-sm font-bold ${isDarkMode ? "text-amber-300" : "text-amber-800"}`}>
-                            {t("dashboard.hiddenResults", { count: lockedCount })}
-                          </span>
-                          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                            isDarkMode ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" : "bg-amber-100 text-amber-700 border border-amber-300"
-                          }`}>
-                            {t("dashboard.upgrade")}
-                          </span>
-                        </div>
-                      </Link>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
         </div>
       </div>
     </div>

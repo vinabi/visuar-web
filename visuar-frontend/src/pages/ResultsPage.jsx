@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Link, useParams, useLocation } from "react-router-dom";
 import {
   ArrowLeft, Download, Share2, CheckCircle2,
@@ -33,7 +33,7 @@ import {
 } from "../components/ProGatedAIContent";
 import { useResultsAIAnalysis } from "../hooks/useResultsAIAnalysis";
 import { onboardingAPI } from "../lib/api";
-import { emptyAiAnalysis } from "../lib/aiAnalysis";
+import { emptyAiAnalysis, saveAIAnalysisToDB } from "../lib/aiAnalysis";
 import { LandoltAcuitySummary } from "../components/LandoltAcuitySummary";
 import { landoltReportFromStoredDecimal } from "../utils/landoltAcuity";
 import { TestPrescriptionCard } from "../components/TestPrescriptionCard";
@@ -470,7 +470,12 @@ export default function ResultsPage() {
   const effectiveSnellenState = resultState || persistedState || dbSnellenState;
   const proAiEnabled = useProAIExplanations();
 
-  const { aiAnalysis, aiLoading: aiFetchLoading } = useResultsAIAnalysis({
+  const persistDashboardAI = useCallback(
+    (aiData) => saveAIAnalysisToDB(testId, aiData, session?.access_token),
+    [testId, session?.access_token]
+  );
+
+  const { aiAnalysis, aiLoading: aiFetchLoading, hasCompleteAI, generateAIAnalysis } = useResultsAIAnalysis({
     testType: effectiveTestType,
     ctx: {
       resultState: resultState || persistedState,
@@ -488,6 +493,8 @@ export default function ResultsPage() {
     userProfile,
     persistSlug: testId && !isNumericId ? testId : null,
     enabled: proAiEnabled,
+    autoFetch: !isNumericId,
+    onPersist: isNumericId ? persistDashboardAI : undefined,
   });
 
   const aiLoading = fetchLoading || aiFetchLoading;
@@ -566,17 +573,53 @@ export default function ResultsPage() {
     );
   }
 
-  function FindingsSection({ findings, recommendations }) {
+  function FindingsSection() {
     const panel = isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200";
-    const useAiFindings = proAiEnabled && aiAnalysis?.findings?.length > 0;
-    const useAiRecs = proAiEnabled && aiAnalysis?.recommendations?.length > 0;
-    const displayFindings = useAiFindings ? aiAnalysis.findings : findings;
-    const displayRecs = useAiRecs ? aiAnalysis.recommendations : recommendations;
-    const aiSummary = proAiEnabled
+    const showDashboardGenerate = proAiEnabled && isNumericId && !hasCompleteAI;
+    const showAiContent = proAiEnabled && hasCompleteAI;
+    const showAiLoading = proAiEnabled && !showDashboardGenerate && aiFetchLoading && !hasCompleteAI;
+    const showFindingsRecs = showAiContent || showAiLoading;
+    const displayFindings = showAiContent ? (aiAnalysis?.findings ?? []) : [];
+    const displayRecs = showAiContent ? (aiAnalysis?.recommendations ?? []) : [];
+    const aiSummary = showAiContent
       ? aiAnalysis?.summary || aiAnalysis?.screening?.summary_en
       : null;
-    const showFindingsSkeleton = proAiEnabled && aiFetchLoading && displayFindings.length === 0;
-    const showRecsSkeleton = proAiEnabled && aiFetchLoading && displayRecs.length === 0;
+    const showFindingsSkeleton = showAiLoading;
+    const showRecsSkeleton = showAiLoading;
+
+    const generateAIButton = showDashboardGenerate ? (
+      <div
+        className={`rounded-2xl p-6 mb-6 text-center ${
+          isDarkMode
+            ? "bg-gradient-to-br from-purple-500/10 to-cyan-500/10 border border-purple-500/25"
+            : "bg-gradient-to-br from-purple-50 to-cyan-50 border border-purple-200"
+        }`}
+      >
+        <Sparkles className={`w-8 h-8 mx-auto mb-3 ${isDarkMode ? "text-purple-400" : "text-purple-600"}`} />
+        <p className={`text-sm mb-4 ${isDarkMode ? "text-slate-300" : "text-slate-600"}`}>
+          AI analysis is not available for this result yet. Generate personalized findings, recommendations, and insights.
+        </p>
+        <Button
+          onClick={generateAIAnalysis}
+          disabled={aiFetchLoading}
+          className={`rounded-full font-bold px-6 ${
+            isDarkMode ? "bg-purple-500 hover:bg-purple-400 text-white" : "bg-purple-600 hover:bg-purple-700 text-white"
+          }`}
+        >
+          {aiFetchLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Generating AI Analysis…
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4 mr-2" />
+              Generate AI Analysis
+            </>
+          )}
+        </Button>
+      </div>
+    ) : null;
 
     const aiSummaryBlock = aiSummary ? (
       <div
@@ -626,8 +669,9 @@ export default function ResultsPage() {
         <ProGatedAIContent isDarkMode={isDarkMode} className="mb-4">
           {proAiEnabled ? (
             <>
-              {aiSummaryBlock}
-              <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
+              {generateAIButton}
+              {showAiContent && aiSummaryBlock}
+              {showFindingsRecs && <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
                 <h3
                   className={`text-lg font-bold mb-4 flex items-center gap-2 ${
                     isDarkMode ? "text-white" : "text-slate-900"
@@ -638,7 +682,7 @@ export default function ResultsPage() {
                   {showFindingsSkeleton && (
                     <Loader2 className="w-4 h-4 animate-spin text-purple-400 ml-1" />
                   )}
-                  {!showFindingsSkeleton && useAiFindings && (
+                  {!showFindingsSkeleton && showAiContent && displayFindings.length > 0 && (
                     <span
                       className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
                         isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
@@ -665,14 +709,10 @@ export default function ResultsPage() {
                       <FindingCard key={i} f={f} isDarkMode={isDarkMode} />
                     ))}
                   </div>
-                ) : (
-                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    No additional findings for this test.
-                  </p>
-                )}
-              </div>
+                ) : null}
+              </div>}
 
-              <div
+              {showFindingsRecs && <div
                 className={`rounded-2xl p-6 mb-6 ${
                   isDarkMode
                     ? "bg-gradient-to-br from-blue-500/8 to-cyan-500/8 border border-blue-500/20"
@@ -686,7 +726,7 @@ export default function ResultsPage() {
                 >
                   <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
                   Recommendations
-                  {!showRecsSkeleton && useAiRecs && (
+                  {!showRecsSkeleton && showAiContent && displayRecs.length > 0 && (
                     <span
                       className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
                         isDarkMode ? "bg-purple-500/20 text-purple-400" : "bg-purple-100 text-purple-600"
@@ -732,91 +772,14 @@ export default function ResultsPage() {
                       </div>
                     ))}
                   </div>
-                ) : (
-                  <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                    Recommendations will appear when AI analysis completes.
-                  </p>
-                )}
-              </div>
-              {aiInsightBlock}
+                ) : null}
+              </div>}
+              {showAiContent && aiInsightBlock}
             </>
           ) : (
             aiInsightBlock
           )}
         </ProGatedAIContent>
-
-        {proAiEnabled ? null : (
-          <>
-            <div className={`rounded-2xl p-6 mb-6 ${panel}`}>
-              <h3
-                className={`text-lg font-bold mb-4 flex items-center gap-2 ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                <Eye className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
-                Key Findings
-              </h3>
-              {displayFindings.length > 0 ? (
-                <div className="space-y-3">
-                  {displayFindings.map((f, i) => (
-                    <FindingCard key={i} f={f} isDarkMode={isDarkMode} />
-                  ))}
-                </div>
-              ) : (
-                <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                  No additional findings for this test.
-                </p>
-              )}
-            </div>
-
-            <div
-              className={`rounded-2xl p-6 mb-6 ${
-                isDarkMode
-                  ? "bg-gradient-to-br from-blue-500/8 to-cyan-500/8 border border-blue-500/20"
-                  : "bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100"
-              }`}
-            >
-              <h3
-                className={`text-lg font-bold mb-4 flex items-center gap-2 ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}
-              >
-                <TrendingUp className={`w-5 h-5 ${isDarkMode ? "text-cyan-400" : "text-cyan-600"}`} />
-                Recommendations
-              </h3>
-              {displayRecs.length > 0 ? (
-                <div className="space-y-3">
-                  {displayRecs.map((rec, i) => (
-                    <div key={i} className="flex gap-3">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                          isDarkMode ? "bg-cyan-500/20" : "bg-cyan-100"
-                        }`}
-                      >
-                        <div
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            isDarkMode ? "bg-cyan-400" : "bg-cyan-500"
-                          }`}
-                        />
-                      </div>
-                      <p
-                        className={`text-sm leading-relaxed ${
-                          isDarkMode ? "text-slate-300" : "text-slate-700"
-                        }`}
-                      >
-                        {rec}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                  No recommendations for this test.
-                </p>
-              )}
-            </div>
-          </>
-        )}
       </>
     );
   }
@@ -968,7 +931,7 @@ export default function ResultsPage() {
           accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1074,7 +1037,7 @@ export default function ResultsPage() {
           pauseCount={pauseCount} accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1182,7 +1145,7 @@ export default function ResultsPage() {
           pauseCount={pauseCount} accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1315,7 +1278,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1428,7 +1391,7 @@ export default function ResultsPage() {
           pauseCount={pauseCount} accuracy={accuracy}
         />
 
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1511,7 +1474,7 @@ export default function ResultsPage() {
           </div>
         </div>
         <ScreeningResultCards estimate={finalEstimate} isDarkMode={isDarkMode} />
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1579,7 +1542,7 @@ export default function ResultsPage() {
             </div>
           </div>
         </div>
-        <FindingsSection findings={findings} recommendations={recs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1626,17 +1589,7 @@ export default function ResultsPage() {
           isDarkMode={isDarkMode}
           title="Estimated prescription from this test"
         />
-        <FindingsSection
-          findings={[
-            {
-              type: "info",
-              title: "Near vision screening",
-              description:
-                "J-numbers and near decimal values are derived from the smallest row passed: decimal ≈ (8÷N)×(40÷distance cm). Reading add (+D) follows the near-decimal table — screening only, not a prescription.",
-            },
-          ]}
-          recommendations={["Schedule an eye exam if near blur affects daily tasks.", "Ensure adequate lighting for close work."]}
-        />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1652,10 +1605,7 @@ export default function ResultsPage() {
             {nf.roundsPassed ?? 0} of {nf.totalRounds ?? 4} distance switches passed
           </p>
         </div>
-        <FindingsSection
-          findings={[{ type: "info", title: "Accommodation exercise", description: "This test samples your ability to read lines after shifting between near and far viewing distances." }]}
-          recommendations={["Practice smooth focus changes when moving between screen and distant objects.", "If switching feels slow or blurry, mention it at your next eye exam."]}
-        />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1774,7 +1724,7 @@ export default function ResultsPage() {
             </Button>
           </Link>
         </div>
-        <FindingsSection findings={snellenFindings} recommendations={snellenRecs} />
+        <FindingsSection />
       </ResultsShell>
     );
   }
@@ -1856,7 +1806,7 @@ export default function ResultsPage() {
       {snellenData?.finalEstimate && (
         <ScreeningResultCards estimate={snellenData.finalEstimate} isDarkMode={isDarkMode} />
       )}
-      <FindingsSection findings={snellenFindings} recommendations={snellenRecs} />
+      <FindingsSection />
     </ResultsShell>
   );
 }

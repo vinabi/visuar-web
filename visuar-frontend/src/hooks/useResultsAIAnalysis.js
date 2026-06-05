@@ -1,10 +1,17 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   fetchAIAnalysis,
   buildResultsAIPayload,
   emptyAiAnalysis,
   mergeAIIntoPersistedResult,
 } from "../lib/aiAnalysis";
+
+function isCompleteAI(ai) {
+  return (
+    (ai?.findings?.length ?? 0) > 0 &&
+    ((ai?.recommendations?.length ?? 0) > 0 || Boolean(ai?.summary))
+  );
+}
 
 /**
  * Fetches AI explanation on the results page when navigation state has no AI yet.
@@ -17,12 +24,15 @@ export function useResultsAIAnalysis({
   persistSlug,
   /** When false (e.g. Free plan), skip Gemini fetch on results page. */
   enabled = true,
+  /** When false (e.g. Dashboard history view), skip auto-fetch on mount. */
+  autoFetch = true,
+  /** Called after manual generate succeeds (e.g. persist to DB). */
+  onPersist,
 }) {
-  const hasCompleteInitial =
-    (initialAi?.findings?.length ?? 0) > 0 &&
-    ((initialAi?.recommendations?.length ?? 0) > 0 || Boolean(initialAi?.summary));
+  const hasCompleteInitial = isCompleteAI(initialAi);
   const [aiAnalysis, setAiAnalysis] = useState(initialAi || emptyAiAnalysis());
   const [aiLoading, setAiLoading] = useState(false);
+  const [hasCompleteAI, setHasCompleteAI] = useState(hasCompleteInitial);
   const fetchedRef = useRef(false);
   const prevTypeRef = useRef(null);
 
@@ -38,6 +48,7 @@ export function useResultsAIAnalysis({
         summary: initialAi.summary || prev.summary,
         summary_ur: initialAi.summary_ur || prev.summary_ur,
       }));
+      setHasCompleteAI(isCompleteAI(initialAi));
     }
   }, [initialAi]);
 
@@ -48,8 +59,31 @@ export function useResultsAIAnalysis({
     }
   }, [testType]);
 
+  const applyAIResult = useCallback(
+    async (data, { persist = true } = {}) => {
+      const next = data.aiAnalysis;
+      const hasContent =
+        next?.findings?.length ||
+        next?.recommendations?.length ||
+        next?.summary ||
+        next?.screening?.summary_en;
+      if (!hasContent) return false;
+
+      setAiAnalysis(next);
+      setHasCompleteAI(isCompleteAI(next));
+      fetchedRef.current = true;
+
+      if (persist) {
+        if (persistSlug) mergeAIIntoPersistedResult(persistSlug, data);
+        if (onPersist) await onPersist(data);
+      }
+      return true;
+    },
+    [persistSlug, onPersist]
+  );
+
   useEffect(() => {
-    if (!enabled || !testType || hasCompleteInitial || fetchedRef.current) return;
+    if (!autoFetch || !enabled || !testType || hasCompleteInitial || fetchedRef.current) return;
 
     const payload = buildResultsAIPayload(testType, { ...ctx, userProfile });
     if (!payload) return;
@@ -61,15 +95,7 @@ export function useResultsAIAnalysis({
     fetchAIAnalysis(payload.test_type || testType, payload, userProfile)
       .then((data) => {
         if (cancelled) return;
-        const next = data.aiAnalysis;
-        const hasContent =
-          next?.findings?.length ||
-          next?.recommendations?.length ||
-          next?.summary ||
-          next?.screening?.summary_en;
-        if (!hasContent) return;
-        setAiAnalysis(next);
-        if (persistSlug) mergeAIIntoPersistedResult(persistSlug, data);
+        applyAIResult(data, { persist: true });
       })
       .catch(() => {})
       .finally(() => {
@@ -80,7 +106,7 @@ export function useResultsAIAnalysis({
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch only when test slug changes
-  }, [testType, hasCompleteInitial, userProfile, persistSlug, enabled]);
+  }, [testType, hasCompleteInitial, userProfile, persistSlug, enabled, autoFetch]);
 
   // Pick up background AI written to sessionStorage after test finish
   useEffect(() => {
@@ -104,6 +130,7 @@ export function useResultsAIAnalysis({
             : prev.recommendations,
         }));
         if (ready) {
+          setHasCompleteAI(true);
           setAiLoading(false);
           fetchedRef.current = true;
         }
@@ -116,5 +143,22 @@ export function useResultsAIAnalysis({
     return () => clearInterval(id);
   }, [persistSlug, hasCompleteInitial, enabled]);
 
-  return { aiAnalysis, aiLoading, setAiAnalysis };
+  const generateAIAnalysis = useCallback(async () => {
+    if (!enabled || !testType || aiLoading || hasCompleteAI) return false;
+
+    const payload = buildResultsAIPayload(testType, { ...ctx, userProfile });
+    if (!payload) return false;
+
+    setAiLoading(true);
+    try {
+      const data = await fetchAIAnalysis(payload.test_type || testType, payload, userProfile);
+      return await applyAIResult(data, { persist: true });
+    } catch {
+      return false;
+    } finally {
+      setAiLoading(false);
+    }
+  }, [enabled, testType, aiLoading, hasCompleteAI, ctx, userProfile, applyAIResult]);
+
+  return { aiAnalysis, aiLoading, hasCompleteAI, generateAIAnalysis, setAiAnalysis };
 }

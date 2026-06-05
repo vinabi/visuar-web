@@ -4,11 +4,9 @@ import {
   ArrowLeft,
   BrainCircuit,
   User,
-  Bot,
   PhoneCall,
   MoreHorizontal,
   Send,
-  Zap,
   Trash2,
   PencilLine,
   Check,
@@ -23,6 +21,9 @@ import {
   PanelLeftOpen,
   Search,
   Crown,
+  Plus,
+  Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { useTheme } from "../context/ThemeContext";
@@ -80,39 +81,64 @@ function ProfileUpdateCard({ update, isDarkMode, onAccept, onReject, loading }) 
   );
 }
 
+const SUGGESTION_PROMPTS = [
+  "Why did my vision score drop?",
+  "What helps with dry eyes?",
+  "Explain the 20-20-20 rule",
+  "How often should I get an eye exam?",
+];
+
+const markdownComponents = (isDarkMode, isUser) => ({
+  p: ({ children }) => (
+    <p className={`text-sm leading-relaxed whitespace-pre-wrap mb-2 last:mb-0 ${isUser ? "" : isDarkMode ? "text-slate-200" : "text-slate-700"}`}>
+      {children}
+    </p>
+  ),
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+  ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-1 text-sm">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-1 text-sm">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  code: ({ children }) => (
+    <code className={`px-1.5 py-0.5 rounded text-xs font-mono ${isDarkMode ? "bg-slate-800 text-cyan-300" : "bg-slate-100 text-slate-800"}`}>
+      {children}
+    </code>
+  ),
+});
+
 function ChatBubble({ msg, isDarkMode, updateDone, onAccept, onReject, updateLoading }) {
   const isUser = msg.role === "user";
 
   return (
-    <div className={`flex gap-3 ${isUser ? "justify-start" : "justify-end"}`}>
-      {isUser && (
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg flex-shrink-0">
-          <User className="w-5 h-5" />
-        </div>
-      )}
+    <div className={`flex gap-2.5 sm:gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+      <div
+        className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full ${
+          isUser
+            ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md"
+            : isDarkMode
+              ? "bg-gradient-to-br from-cyan-600 to-blue-700 text-white shadow-md"
+              : "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-md"
+        }`}
+      >
+        {isUser ? <User className="w-4 h-4 sm:w-5 sm:h-5" /> : <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />}
+      </div>
 
-      <div className="max-w-[78%] flex flex-col">
+      <div className={`flex flex-col min-w-0 max-w-[88%] sm:max-w-[82%] md:max-w-[75%] ${isUser ? "items-end" : "items-start"}`}>
         <div
-          className={`px-5 py-4 rounded-2xl shadow-xl border transition-all ${
+          className={`rounded-2xl px-4 py-3 sm:px-5 sm:py-3.5 shadow-sm border transition-all ${
             isUser
-              ? "bg-blue-100 border-blue-200 text-slate-900 shadow-blue-200/50"
-              : "bg-cyan-700 text-white border-cyan-700 shadow-cyan-600/50"
+              ? isDarkMode
+                ? "bg-blue-600/90 border-blue-500/40 text-white rounded-tr-md"
+                : "bg-blue-600 border-blue-500 text-white rounded-tr-md"
+              : isDarkMode
+                ? "bg-slate-800/90 border-slate-700/80 text-slate-100 rounded-tl-md"
+                : "bg-white border-slate-200 text-slate-800 rounded-tl-md shadow-md"
           }`}
         >
-          <ReactMarkdown
-            components={{
-              p: ({ node, children }) => (
-                <p className="text-sm leading-7 font-medium whitespace-pre-wrap">{children}</p>
-              ),
-              strong: ({ node, children }) => (
-                <strong>{children}</strong>
-              ),
-            }}
-          >
+          <ReactMarkdown components={markdownComponents(isDarkMode, isUser)}>
             {msg.content}
           </ReactMarkdown>
           {msg.created_at && (
-            <p className={`text-[10px] mt-1 text-right ${isUser ? "text-slate-400" : "text-cyan-200/60"}`}>
+            <p className={`text-[10px] mt-2 ${isUser ? "text-blue-100/70 text-right" : isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
               {formatTime(msg.created_at)}
             </p>
           )}
@@ -128,45 +154,88 @@ function ChatBubble({ msg, isDarkMode, updateDone, onAccept, onReject, updateLoa
           />
         )}
         {updateDone === "accepted" && (
-          <p className="text-xs text-emerald-500 mt-1.5">Profile updated.</p>
+          <p className="text-xs text-emerald-500 mt-1.5 px-1">Profile updated.</p>
         )}
         {updateDone === "rejected" && (
-          <p className={`text-xs mt-1.5 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>Kept unchanged.</p>
+          <p className={`text-xs mt-1.5 px-1 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>Kept unchanged.</p>
         )}
         {updateDone === "error" && (
-          <p className="text-xs text-red-500 mt-1.5">Update failed. Try from Settings.</p>
+          <p className="text-xs text-red-500 mt-1.5 px-1">Update failed. Try from Settings.</p>
         )}
       </div>
-
-      {!isUser && (
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-700 text-white shadow-lg flex-shrink-0">
-          <Bot className="w-5 h-5" />
-        </div>
-      )}
     </div>
   );
 }
 
 function TypingIndicator({ isDarkMode }) {
   return (
-    <div className="flex items-end gap-3 justify-end">
-      <div className={`rounded-2xl px-4 py-3 ${
-        isDarkMode
-          ? "bg-slate-800 border-2 border-slate-700"
-          : "bg-gradient-to-r from-cyan-100 to-cyan-200 border-2 border-cyan-300"
+    <div className="flex gap-2.5 sm:gap-3">
+      <div className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full ${
+        isDarkMode ? "bg-gradient-to-br from-cyan-600 to-blue-700" : "bg-gradient-to-br from-cyan-500 to-blue-600"
+      } text-white shadow-md`}>
+        <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+      </div>
+      <div className={`rounded-2xl rounded-tl-md px-4 py-3.5 border ${
+        isDarkMode ? "bg-slate-800/90 border-slate-700/80" : "bg-white border-slate-200 shadow-sm"
       }`}>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-1.5">
           {[0, 150, 300].map((delay) => (
             <span
               key={delay}
-              className="h-2 w-2 rounded-full bg-cyan-500 animate-bounce"
+              className={`h-2 w-2 rounded-full animate-bounce ${isDarkMode ? "bg-cyan-400" : "bg-cyan-500"}`}
               style={{ animationDelay: `${delay}ms` }}
             />
           ))}
+          <span className={`text-xs ml-2 ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Thinking…</span>
         </div>
       </div>
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-700 text-white shadow-lg flex-shrink-0">
-        <Bot className="w-5 h-5" />
+    </div>
+  );
+}
+
+function EmptyChatState({ isDarkMode, onNewChat, onSuggestion }) {
+  return (
+    <div className="flex h-full min-h-[50vh] items-center justify-center px-4 py-8">
+      <div className="w-full max-w-lg text-center">
+        <div className={`mx-auto mb-5 flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl sm:rounded-3xl shadow-xl ${
+          isDarkMode ? "bg-gradient-to-br from-cyan-600 to-blue-700" : "bg-gradient-to-br from-cyan-500 to-blue-600"
+        } text-white`}>
+          <BrainCircuit className="w-8 h-8 sm:w-10 sm:h-10" />
+        </div>
+        <h2 className={`text-xl sm:text-2xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+          AI Vision Consultant
+        </h2>
+        <p className={`text-sm leading-6 mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+          Personalized guidance from your profile, test history, and eye wellness knowledge base.
+        </p>
+        <button
+          onClick={onNewChat}
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-5 py-3 text-sm font-semibold hover:from-cyan-500 hover:to-blue-500 shadow-lg transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          New conversation
+        </button>
+        <div className="mt-8 text-left">
+          <p className={`text-xs font-semibold uppercase tracking-wide mb-3 ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
+            Try asking
+          </p>
+          <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
+            {SUGGESTION_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => onSuggestion(prompt)}
+                className={`text-left text-xs sm:text-sm px-3 py-2 rounded-xl border transition-all hover:scale-[1.02] ${
+                  isDarkMode
+                    ? "border-slate-700 bg-slate-800/60 text-slate-300 hover:border-cyan-500/50 hover:bg-slate-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
+                }`}
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -532,6 +601,15 @@ export default function AIConsultPage() {
     }
   };
 
+  const selectedConversation = conversations.find((c) => c.id === selectedConvId);
+  const messageCount = selectedConversation?.message_count ?? messages.filter((m) => !String(m.id).startsWith("temp-")).length;
+
+  const handleSuggestion = async (text) => {
+    if (!selectedConvId) await handleNewChat();
+    setInput(text);
+    setTimeout(() => inputRef.current?.focus(), 150);
+  };
+
   // ── Live call (unchanged - coming soon) ───────────────────────────────────
   const handleCallClick = () => {
     setShowCallModal(true);
@@ -550,8 +628,8 @@ export default function AIConsultPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
-      className={`min-h-screen relative transition-colors duration-300 ${
-        isDarkMode ? "bg-[#07111f]" : "bg-gradient-to-br from-slate-50 via-cyan-50 to-white"
+      className={`h-[100dvh] relative overflow-hidden transition-colors duration-300 ${
+        isDarkMode ? "bg-[#0a0e1a]" : "bg-[#f4f6f8]"
       }`}
     >
       <AnimatedBackground isDarkMode={isDarkMode} />
@@ -605,103 +683,84 @@ export default function AIConsultPage() {
         </div>
       )}
 
-      <div className="relative z-10 flex h-screen flex-col">
+      <div className="relative z-10 flex h-full flex-col">
         {/* ── Header ───────────────────────────────────────────────────────── */}
-        <header className={`sticky top-0 z-50 border-b backdrop-blur-xl ${
-          isDarkMode ? "border-slate-700/50 bg-slate-950/80" : "border-white/30 bg-white/80"
+        <header className={`shrink-0 z-50 border-b backdrop-blur-xl ${
+          isDarkMode ? "border-slate-800/80 bg-slate-950/90" : "border-slate-200/80 bg-white/90"
         }`}>
-          <div className="mx-auto flex max-w-6xl items-center justify-between px-4 md:px-8 py-4">
-            <div className="flex items-center gap-2">
-              {/* Mobile hamburger — opens drawer */}
+          <div className="flex items-center justify-between gap-2 px-3 sm:px-4 md:px-6 py-2.5 sm:py-3">
+            <div className="flex items-center gap-1 sm:gap-2 min-w-0">
               <button
                 onClick={() => setSidebarOpen(true)}
-                className={`lg:hidden flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                  isDarkMode
-                    ? "text-slate-400 hover:text-white hover:bg-slate-800/50"
-                    : "text-slate-600 hover:text-cyan-600 hover:bg-white/50"
+                className={`lg:hidden flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                  isDarkMode ? "text-slate-400 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100"
                 }`}
                 aria-label="Open chats"
               >
                 <Menu className="w-5 h-5" />
               </button>
-
-              {/* Desktop sidebar toggle */}
               <button
                 onClick={() => setSidebarOpen((o) => !o)}
-                className={`hidden lg:flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                  isDarkMode
-                    ? "text-slate-400 hover:text-white hover:bg-slate-800/50"
-                    : "text-slate-600 hover:text-cyan-600 hover:bg-white/50"
+                className={`hidden lg:flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                  isDarkMode ? "text-slate-400 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100"
                 }`}
                 aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
-                title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
               >
-                {sidebarOpen
-                  ? <PanelLeftClose className="w-5 h-5" />
-                  : <PanelLeftOpen  className="w-5 h-5" />}
+                {sidebarOpen ? <PanelLeftClose className="w-5 h-5" /> : <PanelLeftOpen className="w-5 h-5" />}
               </button>
-
               <Link
                 to="/dashboard"
-                className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isDarkMode
-                    ? "text-slate-400 hover:text-white hover:bg-slate-800/50"
-                    : "text-slate-600 hover:text-cyan-600 hover:bg-white/50"
+                className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                  isDarkMode ? "text-slate-400 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 <ArrowLeft className="w-4 h-4" />
               </Link>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg">
-                <BrainCircuit className="w-6 h-6" />
-              </div>
-              <div>
-                <h1 className={`text-xl font-bold ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                  AI Vision Consultant
-                </h1>
-                <p className={`text-xs ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>
-                  Powered by context-aware AI + RAG
-                </p>
-              </div>
+            <div className="flex-1 min-w-0 text-center px-2">
+              <h1 className={`text-sm sm:text-base font-bold truncate ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+                {selectedConversation?.title || "AI Vision Consultant"}
+              </h1>
+              <p className={`text-[10px] sm:text-xs truncate ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
+                {selectedConvId
+                  ? `${messageCount}/${MAX_MESSAGES} messages · ${plan.name}`
+                  : "Context-aware eye wellness assistant"}
+              </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${
-                isDarkMode
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
-                  : "bg-cyan-500/10 text-cyan-700 border border-cyan-200"
-              }`}>
-                <Zap className="w-3 h-3" />
-                Live
-              </span>
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <button
+                onClick={handleNewChat}
+                className={`hidden sm:flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${
+                  isDarkMode ? "text-slate-400 hover:bg-slate-800 hover:text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+                title="New chat"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
               <Link
                 to="/pricing"
-                className={`hidden sm:inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  activePlanId === "free"
-                    ? isDarkMode
-                      ? "bg-slate-700/80 text-slate-300 border border-slate-600 hover:border-cyan-500"
-                      : "bg-slate-100 text-slate-600 border border-slate-200 hover:border-cyan-400"
-                    : isDarkMode
-                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
-                    : "bg-cyan-50 text-cyan-700 border border-cyan-200"
+                className={`hidden md:inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] sm:text-xs font-semibold border ${
+                  isDarkMode
+                    ? "border-slate-700 bg-slate-800 text-slate-300"
+                    : "border-slate-200 bg-slate-50 text-slate-600"
                 }`}
               >
                 <Crown className="w-3 h-3" />
-                {plan.name} Plan
+                {plan.name}
               </Link>
               <button
                 onClick={handleCallClick}
                 disabled={isCalling}
-                className={`flex items-center gap-2 rounded-full px-5 py-2.5 font-bold text-white shadow-xl transition-all ${
+                className={`flex h-9 items-center gap-1.5 rounded-full px-3 sm:px-4 text-xs sm:text-sm font-semibold text-white transition-all ${
                   isCalling
-                    ? "bg-cyan-700 cursor-not-allowed animate-pulse scale-105"
-                    : "bg-cyan-600 hover:bg-cyan-700 ring-1 ring-cyan-200/20 hover:scale-105"
+                    ? "bg-emerald-600 animate-pulse"
+                    : "bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 shadow-md"
                 }`}
               >
-                <PhoneCall className={`w-5 h-5 ${isCalling ? "animate-bounce" : ""}`} />
-                <span className="hidden sm:inline">{isCalling ? "Calling..." : "Call AI Now"}</span>
+                <PhoneCall className={`w-4 h-4 ${isCalling ? "animate-bounce" : ""}`} />
+                <span className="hidden sm:inline">{isCalling ? "Calling…" : "Call"}</span>
               </button>
             </div>
           </div>
@@ -726,30 +785,31 @@ export default function AIConsultPage() {
           <aside
             className={[
               "flex flex-col border-r shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
-              // Mobile: fixed overlay drawer (below call modal z-[60])
-              "fixed inset-y-0 left-0 z-[55]",
-              // Desktop: static in the flex row, no z-fighting needed
-              "lg:relative lg:inset-y-auto lg:left-auto lg:z-20",
-              // Width + slide: mobile always w-72 but translated; desktop w-72 or w-0
+              "fixed inset-y-0 left-0 z-[55] pt-[env(safe-area-inset-top)]",
+              "lg:relative lg:inset-y-auto lg:left-auto lg:z-20 lg:pt-0",
               sidebarOpen
-                ? "w-72 translate-x-0"
-                : "-translate-x-full w-72 lg:translate-x-0 lg:w-0",
+                ? "w-[min(85vw,18rem)] sm:w-72 translate-x-0"
+                : "-translate-x-full w-[min(85vw,18rem)] sm:w-72 lg:translate-x-0 lg:w-0",
               isDarkMode
-                ? "bg-slate-900 border-slate-700"
-                : "bg-white border-slate-200",
+                ? "bg-slate-950/95 border-slate-800 backdrop-blur-xl"
+                : "bg-white/95 border-slate-200 backdrop-blur-xl",
             ].join(" ")}
           >
             {/* Sidebar header row */}
-            <div className={`px-4 py-3 flex items-center justify-between border-b shrink-0 ${
-              isDarkMode ? "border-slate-700" : "border-slate-200"
+            <div className={`px-3 sm:px-4 py-3 flex items-center justify-between border-b shrink-0 ${
+              isDarkMode ? "border-slate-800" : "border-slate-200"
             }`}>
-              <h3 className={`text-sm font-semibold ${isDarkMode ? "text-slate-200" : "text-slate-700"}`}>Chats</h3>
-              <div className="flex items-center gap-2">
+              <h3 className={`text-sm font-bold flex items-center gap-2 ${isDarkMode ? "text-slate-100" : "text-slate-800"}`}>
+                <MessageSquare className="w-4 h-4 text-cyan-500" />
+                Conversations
+              </h3>
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={handleNewChat}
-                  className="text-xs px-2 py-1 rounded-md bg-cyan-600 text-white hover:bg-cyan-700"
+                  className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold hover:from-cyan-500 hover:to-blue-500 shadow-sm"
                 >
-                  + New
+                  <Plus className="w-3.5 h-3.5" />
+                  New
                 </button>
                 <button
                   onClick={() => setSidebarOpen(false)}
@@ -788,7 +848,7 @@ export default function AIConsultPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-2 py-1">
               {convLoading ? (
                 <div className="flex items-center justify-center h-24">
                   <RefreshCw className="w-5 h-5 animate-spin text-slate-400" />
@@ -813,10 +873,14 @@ export default function AIConsultPage() {
                 return filtered.map((c) => (
                   <div
                     key={c.id}
-                    className={`flex items-center justify-between w-full px-4 py-3 border-b cursor-pointer transition-colors ${
-                      isDarkMode
-                        ? `border-slate-800 hover:bg-slate-800 ${selectedConvId === c.id ? "bg-slate-800" : ""}`
-                        : `border-slate-100 hover:bg-slate-50 ${selectedConvId === c.id ? "bg-slate-100" : ""}`
+                    className={`group flex items-center justify-between w-full my-0.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
+                      selectedConvId === c.id
+                        ? isDarkMode
+                          ? "bg-cyan-500/15 border border-cyan-500/30"
+                          : "bg-cyan-50 border border-cyan-200"
+                        : isDarkMode
+                          ? "hover:bg-slate-800/80 border border-transparent"
+                          : "hover:bg-slate-50 border border-transparent"
                     }`}
                   >
                     <div
@@ -923,75 +987,45 @@ export default function AIConsultPage() {
           </aside>
 
           {/* ── Chat Column ──────────────────────────────────────────────── */}
-          <main className="flex-1 flex flex-col min-w-0">
+          <main className="flex-1 flex flex-col min-w-0 min-h-0">
             {/* Messages */}
             <div
-              className={`flex-1 overflow-y-auto p-4 md:p-8 ${isDarkMode ? "bg-slate-950" : "bg-white"}`}
+              className={`flex-1 overflow-y-auto overscroll-contain ${
+                isDarkMode
+                  ? "bg-gradient-to-b from-slate-950 to-[#0a0e1a]"
+                  : "bg-gradient-to-b from-slate-50/80 to-white"
+              }`}
               style={{ minHeight: 0 }}
               onClick={() => setMenuOpenId(null)}
             >
-              {!selectedConvId ? (
-                <div className="flex h-full items-center justify-center">
-                  <div className="max-w-md text-center">
-                    <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-2xl">
-                      <BrainCircuit className="w-10 h-10" />
-                    </div>
-                    <h2 className={`text-2xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                      Welcome to AI Consult
-                    </h2>
-                    <p className={`text-sm leading-6 mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                      Your personal eye wellness assistant, powered by RAG. Personalized to your profile and test history.
-                    </p>
-                    <button
-                      onClick={handleNewChat}
-                      className="rounded-xl bg-cyan-600 text-white px-6 py-3 font-semibold hover:bg-cyan-700 transition-all"
-                    >
-                      Start a new chat
-                    </button>
+              <div className="mx-auto w-full max-w-3xl px-3 sm:px-4 md:px-6 py-4 sm:py-6 min-h-full">
+                {!selectedConvId ? (
+                  <EmptyChatState isDarkMode={isDarkMode} onNewChat={handleNewChat} onSuggestion={handleSuggestion} />
+                ) : msgLoading ? (
+                  <div className="flex h-full min-h-[40vh] items-center justify-center gap-3">
+                    <RefreshCw className="w-6 h-6 animate-spin text-cyan-500" />
+                    <span className={`text-sm ${isDarkMode ? "text-slate-400" : "text-slate-500"}`}>Loading messages…</span>
                   </div>
-                </div>
-              ) : msgLoading ? (
-                <div className="flex h-full items-center justify-center">
-                  <RefreshCw className="w-8 h-8 animate-spin text-cyan-500" />
-                </div>
-              ) : messages.length === 0 ? (
-                <div className="flex h-full items-center justify-center">
-                  <div className="max-w-md text-center">
-                    <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-2xl">
-                      <BrainCircuit className="w-10 h-10" />
-                    </div>
-                    <h2 className={`text-2xl font-bold mb-3 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
-                      Ask me anything
-                    </h2>
-                    <p className={`text-sm leading-6 mb-4 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                      I'll answer based on your profile, test history, and a curated eye wellness knowledge base.
-                    </p>
-                    <div className={`rounded-2xl border-2 p-4 ${
-                      isDarkMode ? "border-cyan-500/30 bg-cyan-500/10" : "border-cyan-200 bg-cyan-50/50"
-                    }`}>
-                      <p className={`text-xs leading-5 ${isDarkMode ? "text-cyan-300" : "text-cyan-700"}`}>
-                        Try: "Why did my vision score drop?" · "What helps with dry eyes?" · "Explain the 20-20-20 rule"
-                      </p>
-                    </div>
+                ) : messages.length === 0 ? (
+                  <EmptyChatState isDarkMode={isDarkMode} onNewChat={handleNewChat} onSuggestion={handleSuggestion} />
+                ) : (
+                  <div className="space-y-4 sm:space-y-6 pb-2">
+                    {messages.map((msg) => (
+                      <ChatBubble
+                        key={msg.id}
+                        msg={msg}
+                        isDarkMode={isDarkMode}
+                        updateDone={profileDecisions[msg.id] ?? null}
+                        updateLoading={profileUpdateLoading === msg.id}
+                        onAccept={() => handleProfileAccept(msg)}
+                        onReject={() => handleProfileReject(msg.id)}
+                      />
+                    ))}
+                    {sending && <TypingIndicator isDarkMode={isDarkMode} />}
+                    <div ref={messagesEndRef} className="h-1" />
                   </div>
-                </div>
-              ) : (
-                <div className="max-w-3xl mx-auto w-full space-y-5">
-                  {messages.map((msg) => (
-                    <ChatBubble
-                      key={msg.id}
-                      msg={msg}
-                      isDarkMode={isDarkMode}
-                      updateDone={profileDecisions[msg.id] ?? null}
-                      updateLoading={profileUpdateLoading === msg.id}
-                      onAccept={() => handleProfileAccept(msg)}
-                      onReject={() => handleProfileReject(msg.id)}
-                    />
-                  ))}
-                  {sending && <TypingIndicator isDarkMode={isDarkMode} />}
-                  <div ref={messagesEndRef} />
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             {/* ── Error Banner ────────────────────────────────────────── */}
@@ -1061,97 +1095,102 @@ export default function AIConsultPage() {
             )}
 
             {/* ── Input Area ──────────────────────────────────────────── */}
-            <div className={`sticky bottom-0 z-40 border-t backdrop-blur-xl ${
-              isDarkMode ? "border-slate-700/50 bg-slate-900/95" : "border-slate-200/80 bg-white/95"
+            <div className={`shrink-0 z-40 border-t backdrop-blur-xl pb-[env(safe-area-inset-bottom)] ${
+              isDarkMode ? "border-slate-800/80 bg-slate-950/95" : "border-slate-200/80 bg-white/95"
             }`}>
-              <div className="mx-auto max-w-3xl px-4 md:px-8 py-5">
-                {/* Speaking indicator */}
-                {isSpeaking && (
-                  <div className={`flex items-center gap-2 mb-3 px-3 py-1.5 rounded-xl text-xs font-medium w-fit ${
-                    isDarkMode ? "bg-cyan-500/20 text-cyan-300" : "bg-cyan-50 text-cyan-700"
-                  }`}>
-                    <Volume2 className="w-3.5 h-3.5 animate-pulse" />
-                    Speaking response...
-                    <button onClick={stopSpeaking} className="ml-1 underline opacity-70 hover:opacity-100">
-                      Stop
-                    </button>
+              <div className="mx-auto max-w-3xl px-3 sm:px-4 md:px-6 py-3 sm:py-4">
+                {(isSpeaking || isTranscribing) && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {isSpeaking && (
+                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+                        isDarkMode ? "bg-cyan-500/15 text-cyan-300" : "bg-cyan-50 text-cyan-700"
+                      }`}>
+                        <Volume2 className="w-3.5 h-3.5 animate-pulse" />
+                        Speaking…
+                        <button type="button" onClick={stopSpeaking} className="underline opacity-80">Stop</button>
+                      </div>
+                    )}
+                    {isTranscribing && (
+                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+                        isDarkMode ? "bg-violet-500/15 text-violet-300" : "bg-violet-50 text-violet-700"
+                      }`}>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        Transcribing…
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Transcribing indicator */}
-                {isTranscribing && (
-                  <div className={`flex items-center gap-2 mb-3 px-3 py-1.5 rounded-xl text-xs font-medium w-fit ${
-                    isDarkMode ? "bg-violet-500/20 text-violet-300" : "bg-violet-50 text-violet-700"
-                  }`}>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Transcribing voice...
-                  </div>
-                )}
-
-                <form onSubmit={handleSend} className="flex items-end gap-3">
-                  {/* Mic button */}
+                <form
+                  onSubmit={handleSend}
+                  className={`flex items-end gap-2 sm:gap-3 rounded-2xl border p-2 sm:p-2.5 shadow-lg ${
+                    isDarkMode
+                      ? "bg-slate-900/80 border-slate-700/80 shadow-black/20"
+                      : "bg-white border-slate-200 shadow-slate-200/60"
+                  }`}
+                >
                   <button
                     type="button"
                     onClick={toggleRecording}
                     disabled={!selectedConvId || limitReached || sending || isTranscribing}
-                    title={isRecording ? "Stop recording" : "Record voice message"}
-                    className={`flex h-12 w-12 items-center justify-center rounded-2xl font-semibold shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 ${
+                    title={isRecording ? "Stop recording" : "Voice input"}
+                    className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl transition-all disabled:opacity-40 flex-shrink-0 ${
                       isRecording
-                        ? "bg-red-500 text-white animate-pulse ring-4 ring-red-400/40"
+                        ? "bg-red-500 text-white animate-pulse ring-2 ring-red-400/50"
                         : isDarkMode
-                        ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          ? "text-slate-400 hover:bg-slate-800 hover:text-white"
+                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
                     }`}
                   >
                     {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                   </button>
 
-                  <div className="flex-1 relative">
-                    <textarea
-                      ref={inputRef}
-                      value={input}
-                      onChange={(e) => { setInput(e.target.value); voiceTriggeredRef.current = false; }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSend(e);
-                        }
-                      }}
-                      placeholder={
-                        isRecording
-                          ? "Recording... tap mic to stop"
-                          : isTranscribing
-                          ? "Transcribing..."
-                          : !selectedConvId
-                          ? "Start a new chat first..."
-                          : limitReached
-                          ? "Start a new chat to continue..."
-                          : "Ask me about your vision health..."
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => {
+                      setInput(e.target.value);
+                      voiceTriggeredRef.current = false;
+                      e.target.style.height = "auto";
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e);
                       }
-                      disabled={sending || !selectedConvId || limitReached || isRecording || isTranscribing}
-                      rows={1}
-                      className={`w-full rounded-2xl border-2 px-4 py-3 text-sm outline-none transition-all resize-none min-h-[48px] max-h-[120px] font-medium ${
-                        isDarkMode
-                          ? "border-cyan-600 bg-slate-900 text-white placeholder-slate-400 focus:border-cyan-500"
-                          : "border-slate-300 bg-white text-slate-900 placeholder-slate-500 focus:border-cyan-500"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    />
-                    <div className={`absolute bottom-3 right-3 text-xs pointer-events-none ${isDarkMode ? "text-slate-500" : "text-slate-400"}`}>
-                      ⏎ Send
-                    </div>
-                  </div>
+                    }}
+                    placeholder={
+                      isRecording
+                        ? "Recording… tap mic to stop"
+                        : isTranscribing
+                          ? "Transcribing…"
+                          : !selectedConvId
+                            ? "Start a new chat to begin"
+                            : limitReached
+                              ? "Message limit reached — start a new chat"
+                              : "Message AI Vision Consultant…"
+                    }
+                    disabled={sending || !selectedConvId || limitReached || isRecording || isTranscribing}
+                    rows={1}
+                    className={`flex-1 bg-transparent text-sm outline-none resize-none min-h-[40px] max-h-32 py-2.5 px-1 leading-relaxed ${
+                      isDarkMode
+                        ? "text-white placeholder-slate-500"
+                        : "text-slate-900 placeholder-slate-400"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  />
+
                   <button
                     type="submit"
                     disabled={sending || !input.trim() || !selectedConvId || limitReached}
-                    className="flex h-12 w-12 items-center justify-center rounded-2xl font-semibold shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 bg-cyan-600 text-white hover:bg-cyan-700"
+                    className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-xl flex-shrink-0 bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500 shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
                   >
-                    {sending ? (
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Send className="w-5 h-5" />
-                    )}
+                    {sending ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                   </button>
                 </form>
+                <p className={`hidden sm:block text-[10px] text-center mt-2 ${isDarkMode ? "text-slate-600" : "text-slate-400"}`}>
+                  Enter to send · Shift+Enter for new line · AI responses use your profile & test history
+                </p>
               </div>
             </div>
           </main>

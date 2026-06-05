@@ -303,6 +303,29 @@ export function buildResultsAIPayload(testType, ctx) {
   }
 }
 
+/** Persist AI fields on an existing test result (Dashboard generate flow). */
+export async function saveAIAnalysisToDB(resultId, aiData, accessToken) {
+  if (!resultId || !accessToken || !aiData?.ai_findings) return false;
+  try {
+    const res = await fetch(`${API_URL}/api/test-results/${resultId}/ai`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        ai_findings: aiData.ai_findings,
+        ai_recommendations: aiData.ai_recommendations,
+        ai_summary: aiData.ai_summary,
+      }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("[VISUAR] Save AI analysis error:", err);
+    return false;
+  }
+}
+
 /** Merge AI into session summary / persisted results after background fetch. */
 export function mergeAIIntoPersistedResult(slug, aiData) {
   if (!slug || !aiData?.aiAnalysis?.findings?.length) return;
