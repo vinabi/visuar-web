@@ -103,12 +103,17 @@ export function buildTestEyePrescription({
   const resolvedAxis = cyl !== 0 && axis != null ? Math.round(axis) % 180 : null;
 
   return {
-    acuity,
+    acuity: acuity ?? null,
     sph,
     cyl,
     axis: resolvedAxis,
     diopter: sph,
-    singleDiopterD: computeSingleDiopterD(sph, cyl),
-    prescriptionLabel: formatPrescription({ sph, cyl, axis: resolvedAxis }),
+    singleDiopterD: sph != null ? computeSingleDiopterD(sph, cyl) : null,
+    prescriptionLabel:
+      sph != null
+        ? formatPrescription({ sph, cyl, axis: resolvedAxis })
+        : acuity
+          ? `Acuity ${acuity}`
+          : "—",
   };
 }
