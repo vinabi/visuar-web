@@ -30,6 +30,7 @@ import {
   ProGatedAIContent,
   AIExplanationPlaceholder,
   useProAIExplanations,
+  useCanPersistTestResults,
 } from "../components/ProGatedAIContent";
 import { useResultsAIAnalysis } from "../hooks/useResultsAIAnalysis";
 import { onboardingAPI } from "../lib/api";
@@ -304,7 +305,12 @@ export default function ResultsPage() {
           .then((res) => (res.ok ? res.json() : []))
           .then((list) => {
             if (!Array.isArray(list)) return null;
-            return list.find((r) => r.test_type === testId) ?? null;
+            const matches = list.filter((r) => r.test_type === testId);
+            if (matches.length === 0) return null;
+            // API returns newest first; sort defensively by created_at
+            return matches.sort(
+              (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0];
           });
 
     load
@@ -329,7 +335,7 @@ export default function ResultsPage() {
   const isNearFarTest = effectiveTestType === "near-far-switching";
 
   // ── Build data from fetched DB record (history view) ─────
-  const fromDB = isNumericId && fetchedRecord;
+  const fromDB = Boolean(fetchedRecord);
 
   const parseSafe = (str, fallback = []) => {
     try { return JSON.parse(str || "null") || fallback; } catch { return fallback; }
@@ -436,21 +442,38 @@ export default function ResultsPage() {
 
   const refractionData = resultState?.leftEye ? resultState : dbRefractionState;
 
-  const dbSnellenState = fromDB && !isContrastTest && !isOrientationTest && !isLandoltTest && !isColorVisionTest && !isRefractionTest && !isCompleteAssessment && !isJaegerTest && !isNearFarTest ? {
-    leftEye: {
-      acuity: fetchedRecord.left_eye_acuity,
-      diopter: fetchedRecord.left_eye_diopter,
-      sph: fetchedRecord.left_eye_diopter,
-    },
-    rightEye: {
-      acuity: fetchedRecord.right_eye_acuity,
-      diopter: fetchedRecord.right_eye_diopter,
-      sph: fetchedRecord.right_eye_diopter,
-    },
-    overallScore: fetchedRecord.overall_score,
-    timestamp: fetchedRecord.created_at,
-    aiAnalysis: fetchedAI,
-  } : null;
+  const dbSnellenParsed =
+    fromDB && fetchedRecord?.result_json ? parseSafe(fetchedRecord.result_json, null) : null;
+  const isSnellenLike =
+    effectiveTestType === "snellen-acuity" ||
+    (!isContrastTest &&
+      !isOrientationTest &&
+      !isLandoltTest &&
+      !isColorVisionTest &&
+      !isRefractionTest &&
+      !isCompleteAssessment &&
+      !isJaegerTest &&
+      !isNearFarTest &&
+      !isRapidTest);
+  const dbSnellenState =
+    fromDB && isSnellenLike
+      ? {
+          ...dbSnellenParsed,
+          leftEye: dbSnellenParsed?.leftEye ?? {
+            acuity: fetchedRecord.left_eye_acuity,
+            diopter: fetchedRecord.left_eye_diopter,
+            sph: fetchedRecord.left_eye_diopter,
+          },
+          rightEye: dbSnellenParsed?.rightEye ?? {
+            acuity: fetchedRecord.right_eye_acuity,
+            diopter: fetchedRecord.right_eye_diopter,
+            sph: fetchedRecord.right_eye_diopter,
+          },
+          overallScore: dbSnellenParsed?.overallScore ?? fetchedRecord.overall_score,
+          timestamp: fetchedRecord.created_at,
+          aiAnalysis: fetchedAI,
+        }
+      : null;
 
   const contrastData = resultState?.contrastData || dbContrastData;
   const orientationData = resultState?.orientationData || dbOrientationData;
@@ -473,6 +496,7 @@ export default function ResultsPage() {
 
   const effectiveSnellenState = resultState || persistedState || dbSnellenState;
   const proAiEnabled = useProAIExplanations();
+  const canPersistResults = useCanPersistTestResults();
 
   const persistDashboardAI = useCallback(
     (aiData) => saveAIAnalysisToDB(testId, aiData, session?.access_token),
@@ -1727,7 +1751,66 @@ export default function ResultsPage() {
     : [{ type: "info", title: "No Test Data", description: "Complete a Distance Eyesight Number test to see your results here." }];
   const snellenRecs = hasReal ? buildSnellenRecs(leftAcuity, rightAcuity, leftDiopter, rightDiopter) : [];
 
+  const hasNavigatedResult = Boolean(resultState || persistedState);
+  const isIncompleteSnellen = hasNavigatedResult && !hasReal;
+  const snellenSaveStatus = snellenData?.saveStatus;
+
+  function SnellenSaveBanner() {
+    if (!canPersistResults || !snellenSaveStatus) return null;
+    if (snellenSaveStatus === "pending") {
+      return (
+        <div
+          className={`mb-6 px-4 py-3 rounded-xl text-sm font-medium text-center ${
+            isDarkMode
+              ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/30"
+              : "bg-cyan-50 text-cyan-800 border border-cyan-200"
+          }`}
+        >
+          Saving results to your history…
+        </div>
+      );
+    }
+    if (snellenSaveStatus === "failed") {
+      return (
+        <div
+          className={`mb-6 px-4 py-3 rounded-xl text-sm font-medium text-center ${
+            isDarkMode
+              ? "bg-amber-500/10 text-amber-300 border border-amber-500/30"
+              : "bg-amber-50 text-amber-800 border border-amber-200"
+          }`}
+        >
+          Results are shown here but could not be saved to your history. Check your connection and try the test again.
+        </div>
+      );
+    }
+    return null;
+  }
+
   if (!hasReal) {
+    if (isIncompleteSnellen) {
+      return (
+        <ResultsShell title="Distance Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
+          <SnellenSaveBanner />
+          <div className={`rounded-2xl p-10 mb-6 text-center ${isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200"}`}>
+            <AlertTriangle className={`w-12 h-12 mx-auto mb-4 ${isDarkMode ? "text-amber-400" : "text-amber-500"}`} />
+            <h2 className={`text-xl font-bold mb-2 ${isDarkMode ? "text-white" : "text-slate-900"}`}>
+              Incomplete result
+            </h2>
+            <p className={`text-sm max-w-md mx-auto mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
+              The test finished but acuity scores for both eyes were not recorded. Please retake the Distance Eyesight
+              Number test and complete the letter chart for each eye before the astigmatism step.
+            </p>
+            <Link to="/test/snellen-acuity">
+              <Button className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8">
+                Retake Distance Eyesight Number test
+              </Button>
+            </Link>
+          </div>
+          <FindingsSection />
+        </ResultsShell>
+      );
+    }
+
     return (
       <ResultsShell title="Distance Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
         <div className={`rounded-2xl p-10 mb-6 text-center ${isDarkMode ? "bg-slate-800/40 border border-slate-700/40" : "bg-slate-50 border border-slate-200"}`}>
@@ -1736,8 +1819,8 @@ export default function ResultsPage() {
             No results yet
           </h2>
           <p className={`text-sm max-w-md mx-auto mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-            Finish a Distance Eyesight Number test and tap <strong>View full result</strong> on the summary screen, or open a saved
-            result from your dashboard history.
+            Finish a Distance Eyesight Number test to see your results here, or open a saved result from your dashboard
+            history.
           </p>
           <Link to="/test/snellen-acuity">
             <Button className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8">
@@ -1752,6 +1835,7 @@ export default function ResultsPage() {
 
   return (
     <ResultsShell title="Distance Eyesight Number Test Results" date={dateStr} isDarkMode={isDarkMode}>
+      <SnellenSaveBanner />
       {/* Hero score */}
       <div className={`rounded-2xl p-6 mb-6 ${isDarkMode ? "bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20" : "bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100"}`}>
         <div className="flex flex-col md:flex-row items-center gap-8">
