@@ -146,6 +146,7 @@ export function AstigmatismFanEngine({
   visionOk,
   onComplete,
   showInstructions = true,
+  testingEye = "left",
 }) {
   const [phase, setPhase] = useState(showInstructions ? "INSTRUCTIONS" : "FAN");
   const [selectedIndices, setSelectedIndices] = useState([]);
@@ -181,11 +182,12 @@ export function AstigmatismFanEngine({
   const hitRadius = useCallback(() => (isTouchRef.current ? 32 : 22), []);
 
   const emitComplete = useCallback((payload) => {
-    if (completedRef.current) return;
-    completedRef.current = true;
     try {
-      onCompleteRef.current(payload);
-    } catch {
+      const ok = onCompleteRef.current(payload);
+      if (ok === false) return;
+      completedRef.current = true;
+    } catch (err) {
+      console.error("[VISUAR] Astigmatism onComplete error:", err);
       completedRef.current = false;
     }
   }, []);
@@ -256,6 +258,7 @@ export function AstigmatismFanEngine({
   const finishCrossPhase = useCallback(() => {
     const cyl = cylinderFromNormalizationStep(sliderStep);
     emitComplete({
+      eye: testingEye,
       cyl,
       axis: prescriptionAxis,
       darkestLineAngle: lineAxisDeg,
@@ -268,6 +271,7 @@ export function AstigmatismFanEngine({
       allEqual: false,
     });
   }, [
+    testingEye,
     sliderStep,
     prescriptionAxis,
     lineAxisDeg,
@@ -281,6 +285,7 @@ export function AstigmatismFanEngine({
     setSelectedIndices([]);
     setHoverIndex(null);
     emitComplete({
+      eye: testingEye,
       cyl: 0,
       axis: null,
       darkestLineAngle: null,
@@ -292,7 +297,7 @@ export function AstigmatismFanEngine({
       confidence: 0.75,
       allEqual: true,
     });
-  }, [emitComplete]);
+  }, [testingEye, emitComplete]);
 
   const fanInstruction =
     "Tap every line that looks darkest, thickest, or sharpest (tap again to deselect). If all lines look the same, choose All lines equal.";
