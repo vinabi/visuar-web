@@ -82,6 +82,7 @@ export function cylinderFromNormalizationStep(step) {
 
 /** Format prescription for display. */
 export function formatPrescription({ sph, cyl, axis }) {
+  if (sph == null || Number.isNaN(sph)) return "SPH —";
   const s = sph >= 0 ? `+${sph.toFixed(2)}` : sph.toFixed(2);
   if (!cyl || cyl === 0) return `SPH ${s} D`;
   const c = cyl.toFixed(2);
