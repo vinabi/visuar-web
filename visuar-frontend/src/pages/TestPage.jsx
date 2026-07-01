@@ -281,7 +281,45 @@ export default function TestPage() {
   const refractionBufferRef = useRef({ left: {}, right: {} });
   const [refractionEngineKey, setRefractionEngineKey] = useState(0);
   const [sessionEstimate, setSessionEstimate] = useState(null);
+  const [sessionSummaryNav, setSessionSummaryNav] = useState(null);
   const pendingNavRef = useRef(null);
+  const snellenFinalizedRef = useRef(false);
+  const testIdRef = useRef(testId);
+  const snellenSubPhaseRef = useRef(snellenSubPhase);
+  const jaegerSubPhaseRef = useRef(jaegerSubPhase);
+  const refractionSubPhaseRef = useRef(refractionSubPhase);
+
+  useEffect(() => {
+    testIdRef.current = testId;
+  }, [testId]);
+
+  useEffect(() => {
+    snellenSubPhaseRef.current = snellenSubPhase;
+  }, [snellenSubPhase]);
+
+  useEffect(() => {
+    jaegerSubPhaseRef.current = jaegerSubPhase;
+  }, [jaegerSubPhase]);
+
+  useEffect(() => {
+    refractionSubPhaseRef.current = refractionSubPhase;
+  }, [refractionSubPhase]);
+
+  const resetSnellenTestState = useCallback(() => {
+    snellenFinalizedRef.current = false;
+    refractionBufferRef.current = { left: {}, right: {} };
+    snellenSubPhaseRef.current = "acuity";
+    setSnellenSubPhase("acuity");
+    snellenLetterTimingsRef.current = [];
+    snellenLevelProgressionRef.current = [];
+    snellenPauseCountRef.current = 0;
+  }, []);
+
+  useEffect(() => {
+    if (testId !== "snellen-acuity") return;
+    // Only clear finalize guard on entry — do not wipe in-progress acuity buffer (HMR / remount).
+    snellenFinalizedRef.current = false;
+  }, [testId]);
 
   /** Background Gemini analysis — updates persisted results and session-summary nav state. */
   const runPostTestAI = useCallback(
@@ -672,7 +710,7 @@ export default function TestPage() {
 
   // ─── Eye violation monitor (during TESTING, all implemented tests) ──────────
   useEffect(() => {
-    if (testPhase !== "TESTING") {
+    if (testPhase !== "TESTING" || showAstigmatismEngine) {
       eyeBadSinceRef.current = null;
       setEyeWarningVisible(false);
       return;
@@ -707,7 +745,7 @@ export default function TestPage() {
       }
     }, 200);
     return () => clearInterval(tick);
-  }, [testPhase, testingEye, showSnellenEngine]);
+  }, [testPhase, testingEye, showSnellenEngine, showAstigmatismEngine]);
 
   const dismissEyePauseOverlay = useCallback((manualResume = false) => {
     eyeBadSinceRef.current = null;
@@ -773,12 +811,49 @@ export default function TestPage() {
     });
   }, []);
 
+  const enrichSnellenEyeFromBuffer = useCallback(
+    (eye) => {
+      const buf = refractionBufferRef.current[eye] || {};
+      let rx = {};
+      try {
+        rx = buildEyeRxFromBuffer(eye, "decimal");
+      } catch (err) {
+        console.error(`[VISUAR] Snellen RX build failed for ${eye}:`, err);
+      }
+      return {
+        ...rx,
+        acuity: rx.acuity ?? buf.acuity ?? null,
+        sph: rx.sph ?? buf.snellenD ?? null,
+        cyl: rx.cyl ?? buf.cyl ?? 0,
+        axis: rx.axis ?? buf.axis ?? null,
+        diopter: rx.diopter ?? rx.sph ?? buf.snellenD ?? null,
+        singleDiopterD: rx.singleDiopterD ?? null,
+        prescriptionLabel:
+          rx.prescriptionLabel ??
+          (buf.acuity ? `Acuity ${buf.acuity}` : "—"),
+      };
+    },
+    [buildEyeRxFromBuffer]
+  );
+
   const beginAstigmatismPhase = useCallback((setSubPhase) => {
     setSubPhase("astigmatism");
+    if (testIdRef.current === "snellen-acuity") {
+      snellenSubPhaseRef.current = "astigmatism";
+    } else if (testIdRef.current === "jaeger-acuity") {
+      jaegerSubPhaseRef.current = "astigmatism";
+    } else if (testIdRef.current === "refraction-battery") {
+      if (refractionSubPhaseRef.current === "snellen") {
+        snellenSubPhaseRef.current = "astigmatism";
+      } else if (refractionSubPhaseRef.current === "jaeger") {
+        jaegerSubPhaseRef.current = "astigmatism";
+      }
+    }
     setTestingEye("left");
     testingEyeRef.current = "left";
     setRefractionEngineKey((k) => k + 1);
     finishingRef.current = false;
+    snellenFinalizedRef.current = false;
     setIsSaving(false);
     levelResultFiredRef.current = false;
     setTestPhase("INSTRUCTION");
@@ -797,7 +872,9 @@ export default function TestPage() {
       setIsSaving(false);
       finishingRef.current = false;
       stopCamera();
-      pendingNavRef.current = { path, state: base };
+      const nav = { path, state: base };
+      pendingNavRef.current = nav;
+      setSessionSummaryNav(nav);
       if (slug) persistTestResult(slug, base);
       setTestPhase("SESSION_SUMMARY");
 
@@ -807,7 +884,9 @@ export default function TestPage() {
           const estimate = refreshSessionEstimate({ visionFocus, correctionMode });
           const enriched = { ...base, finalEstimate: estimate };
           setSessionEstimate(estimate);
-          pendingNavRef.current = { path, state: enriched };
+          const enrichedNav = { path, state: enriched };
+          pendingNavRef.current = enrichedNav;
+          setSessionSummaryNav(enrichedNav);
           if (slug) persistTestResult(slug, enriched);
         } catch (err) {
           console.error("[VISUAR] Session estimate refresh error:", err);
@@ -1230,121 +1309,206 @@ export default function TestPage() {
     [testingEye, isRefractionBattery, isRefractionSimulatorTest, advanceRefractionAfterEye, finalizeRefractionResults]
   );
 
-  // ─── Save results to database ──────────────────────────
-  const saveResultsToDB = useCallback(async (payload) => {
-    try {
-      const leftScore = acuityToScore(payload.leftEye?.acuity);
-      const rightScore = acuityToScore(payload.rightEye?.acuity);
-      const overallScore = Math.round((leftScore + rightScore) / 2);
+  // ─── Snellen results: enrich payload (sync) then persist in background ──
+  const prepareSnellenPayload = useCallback((payload) => {
+    const leftScore = acuityToScore(payload.leftEye?.acuity);
+    const rightScore = acuityToScore(payload.rightEye?.acuity);
+    const overallScore = Math.round((leftScore + rightScore) / 2);
+    payload.overallScore = payload.overallScore ?? overallScore;
+
+    const visionFocus = getVisionFocus();
+    ["left", "right"].forEach((eye) => {
+      const eyeData = payload[`${eye}Eye`];
+      if (!eyeData) return;
+      const sphereD = eyeData.sph ?? eyeData.diopter;
+      const cyl = eyeData.cyl ?? 0;
+      const axis = eyeData.axis ?? null;
+      appendScreeningResult(
+        normalizeTestResultRecord({
+          testName: "Distance Eyesight Number Test",
+          testId: "snellen-acuity",
+          eye,
+          visionFocus,
+          correctionMode,
+          rawResult: eyeData.acuity,
+          unit: "decimal",
+          distanceAcuity: eyeData.acuity,
+          estimatedSphereD: sphereD,
+          estimatedCylinderD: cyl,
+          estimatedAxis: axis,
+          singleDiopterD: computeSingleDiopterD(sphereD, cyl),
+          confidenceScore: 55,
+        })
+      );
+    });
+    const sessionData = getScreeningSession();
+    const finalEstimate = buildFinalScreeningEstimate(sessionData.results, {
+      visionFocus,
+      correctionMode,
+    });
+    payload.finalEstimate = finalEstimate;
+    payload.correctionMode = correctionMode;
+    payload.visionFocus = visionFocus;
+    payload.diopterDisclaimer = DIOPTER_ESTIMATE_DISCLAIMER;
+    return payload;
+  }, [correctionMode]);
+
+  const persistSnellenResultInBackground = useCallback(
+    async (payload) => {
+      if (!canPersistResults) return;
+      const slug = testId || "snellen-acuity";
+      const overallScore = payload.overallScore ?? 0;
+      const finalEstimate = payload.finalEstimate;
+
+      const patchSaveStatus = (saveStatus) => {
+        payload.saveStatus = saveStatus;
+        if (pendingNavRef.current?.state) {
+          const next = { ...pendingNavRef.current.state, saveStatus };
+          pendingNavRef.current = { ...pendingNavRef.current, state: next };
+          persistTestResult(slug, next);
+        }
+      };
+
+      try {
+        const saved = await postTestResultToDb({
+          test_type: slug,
+          left_eye_acuity: payload.leftEye?.acuity || null,
+          right_eye_acuity: payload.rightEye?.acuity || null,
+          left_eye_diopter: payload.leftEye?.diopter || null,
+          right_eye_diopter: payload.rightEye?.diopter || null,
+          overall_score: overallScore,
+          result_json: JSON.stringify(payload),
+        });
+        if (saved?.id) {
+          payload.savedResultId = saved.id;
+          if (pendingNavRef.current?.state) {
+            pendingNavRef.current = {
+              ...pendingNavRef.current,
+              state: { ...pendingNavRef.current.state, savedResultId: saved.id, saveStatus: "saved" },
+            };
+            persistTestResult(slug, pendingNavRef.current.state);
+          }
+          console.log("[VISUAR] Snellen results saved to DB.");
+          void runAIAndPatchResult(
+            saved.id,
+            "snellen_acuity",
+            () =>
+              buildGeminiScreeningPayload(finalEstimate, {
+                test_type: "snellen_acuity",
+                overall_score: overallScore,
+                snellenResult: {
+                  leftAcuity: payload.leftEye?.acuity ?? null,
+                  rightAcuity: payload.rightEye?.acuity ?? null,
+                  leftSphereD: payload.leftEye?.sph ?? payload.leftEye?.diopter,
+                  rightSphereD: payload.rightEye?.sph ?? payload.rightEye?.diopter,
+                  leftCylinderD: payload.leftEye?.cyl,
+                  rightCylinderD: payload.rightEye?.cyl,
+                  leftAxis: payload.leftEye?.axis,
+                  rightAxis: payload.rightEye?.axis,
+                },
+                fatigueSignals: {
+                  fatigueLevel: payload.fatigueLevel ?? "None",
+                  pauseCount: payload.pauseCount ?? 0,
+                  consistencyScore: payload.consistencyScore ?? 100,
+                  sessionStability: payload.sessionStability ?? 100,
+                },
+                reliabilitySignals: {
+                  accuracy: payload.accuracy ?? 0,
+                  consistencyScore: payload.consistencyScore ?? 100,
+                },
+              }),
+            { slug, navStateRef: pendingNavRef }
+          );
+        } else {
+          console.warn("[VISUAR] Snellen results could not be saved to history.");
+          patchSaveStatus("failed");
+        }
+      } catch (err) {
+        const isTimeout = err?.name === "AbortError";
+        console.error(
+          `[VISUAR] Background snellen save failed${isTimeout ? " (timed out)" : ""}:`,
+          err
+        );
+        patchSaveStatus("failed");
+      }
+    },
+    [canPersistResults, testId, postTestResultToDb, runAIAndPatchResult]
+  );
+
+  const finishSnellenWithResults = useCallback(
+    (payload) => {
+      if (snellenFinalizedRef.current) return true;
+
+      const slug = testIdRef.current || testId || "snellen-acuity";
+      try {
+        prepareSnellenPayload(payload);
+      } catch (err) {
+        console.error("[VISUAR] Snellen payload preparation failed:", err);
+      }
 
       const visionFocus = getVisionFocus();
-      ["left", "right"].forEach((eye) => {
-        const eyeData = payload[`${eye}Eye`];
-        if (!eyeData) return;
-        const sphereD = eyeData.sph ?? eyeData.diopter;
-        const cyl = eyeData.cyl ?? 0;
-        const axis = eyeData.axis ?? null;
-        appendScreeningResult(
-          normalizeTestResultRecord({
-            testName: "Distance Eyesight Number Test",
-            testId: "snellen-acuity",
-            eye,
-            visionFocus,
-            correctionMode,
-            rawResult: eyeData.acuity,
-            unit: "decimal",
-            distanceAcuity: eyeData.acuity,
-            estimatedSphereD: sphereD,
-            estimatedCylinderD: cyl,
-            estimatedAxis: axis,
-            singleDiopterD: computeSingleDiopterD(sphereD, cyl),
-            confidenceScore: 55,
-          })
-        );
-      });
-      const sessionData = getScreeningSession();
-      const finalEstimate = buildFinalScreeningEstimate(sessionData.results, {
+      const navState = {
+        ...payload,
         visionFocus,
         correctionMode,
-      });
-      payload.finalEstimate = finalEstimate;
-      payload.correctionMode = correctionMode;
-      payload.visionFocus = visionFocus;
-      payload.diopterDisclaimer = DIOPTER_ESTIMATE_DISCLAIMER;
+        saveStatus: canPersistResults ? "pending" : null,
+      };
 
-      if (!canPersistResults) return;
-
-      const slug = testId || "snellen-acuity";
-      const saved = await postTestResultToDb({
-        test_type: slug,
-        left_eye_acuity: payload.leftEye?.acuity || null,
-        right_eye_acuity: payload.rightEye?.acuity || null,
-        left_eye_diopter: payload.leftEye?.diopter || null,
-        right_eye_diopter: payload.rightEye?.diopter || null,
-        overall_score: overallScore,
-        result_json: JSON.stringify(payload),
-      });
-      if (saved?.id) {
-        payload.savedResultId = saved.id;
-        console.log("[VISUAR] Snellen results saved to DB.");
-        void runAIAndPatchResult(
-          saved.id,
-          "snellen_acuity",
-          () =>
-            buildGeminiScreeningPayload(finalEstimate, {
-              test_type: "snellen_acuity",
-              overall_score: overallScore,
-              snellenResult: {
-                leftAcuity: payload.leftEye?.acuity ?? null,
-                rightAcuity: payload.rightEye?.acuity ?? null,
-                leftSphereD: payload.leftEye?.sph ?? payload.leftEye?.diopter,
-                rightSphereD: payload.rightEye?.sph ?? payload.rightEye?.diopter,
-                leftCylinderD: payload.leftEye?.cyl,
-                rightCylinderD: payload.rightEye?.cyl,
-                leftAxis: payload.leftEye?.axis,
-                rightAxis: payload.rightEye?.axis,
-              },
-              fatigueSignals: {
-                fatigueLevel: payload.fatigueLevel ?? "None",
-                pauseCount: payload.pauseCount ?? 0,
-                consistencyScore: payload.consistencyScore ?? 100,
-                sessionStability: payload.sessionStability ?? 100,
-              },
-              reliabilitySignals: {
-                accuracy: payload.accuracy ?? 0,
-                consistencyScore: payload.consistencyScore ?? 100,
-              },
-            }),
-          { slug, navStateRef: pendingNavRef }
-        );
-      } else if (session?.access_token) {
-        alert(
-          "Warning: results could not be saved to your history. Check that you are signed in."
-        );
+      if (!navState.leftEye?.acuity || !navState.rightEye?.acuity) {
+        navState.completionError = "incomplete_acuity";
       }
-    } catch (err) {
-      const isTimeout = err?.name === "AbortError";
-      console.error(
-        `[VISUAR] Failed to save results${isTimeout ? " (timed out)" : ""}:`,
-        err
-      );
-      if (canPersistResults) {
-        alert(
-          isTimeout
-            ? "Saving took too long — your results are still shown on the next screen. Check your connection and try again from the dashboard."
-            : "Warning: results could not be saved — backend may be offline."
-        );
-      }
-    }
-  }, [canPersistResults, session, testId, correctionMode, postTestResultToDb, runAIAndPatchResult]);
 
-  const finalizeStandaloneSnellenResults = useCallback(async () => {
-    if (finishingRef.current) return;
-    finishingRef.current = true;
-    beginSaving();
+      const path = `/results/${slug}`;
+      setIsSaving(false);
+      finishingRef.current = false;
+      snellenFinalizedRef.current = true;
+      persistTestResult(slug, navState);
+      offerResultsWithSessionSummary(path, navState);
+      void persistSnellenResultInBackground(navState);
+      return true;
+    },
+    [
+      testId,
+      prepareSnellenPayload,
+      correctionMode,
+      canPersistResults,
+      persistSnellenResultInBackground,
+      offerResultsWithSessionSummary,
+    ]
+  );
 
-    const leftEye = buildEyeRxFromBuffer("left", "decimal");
-    const rightEye = buildEyeRxFromBuffer("right", "decimal");
+  const backfillSnellenAcuityFromProgression = useCallback(() => {
+    ["left", "right"].forEach((eye) => {
+      const buf = refractionBufferRef.current[eye];
+      if (buf?.acuity) return;
+
+      const eyeLevels = snellenLevelProgressionRef.current.filter((e) => e.eye === eye);
+      if (eyeLevels.length === 0) return;
+
+      const lastPassed = [...eyeLevels].reverse().find((e) => e.passed);
+      const lastEntry = eyeLevels[eyeLevels.length - 1];
+      const levelIndex = lastPassed?.levelIndex ?? lastEntry?.levelIndex;
+      if (levelIndex == null) return;
+
+      const acuity = lastPassed
+        ? snellenLevels[levelIndex]
+        : levelIndex > 0
+          ? snellenLevels[levelIndex - 1]
+          : snellenLevels[0];
+      if (!acuity) return;
+
+      refractionBufferRef.current[eye] = {
+        ...buf,
+        acuity,
+        snellenD: buf?.snellenD ?? computeDiopter(acuity, "decimal"),
+      };
+    });
+  }, [snellenLevels, computeDiopter]);
+
+  const finalizeStandaloneSnellenResults = useCallback(() => {
+    backfillSnellenAcuityFromProgression();
+    const leftEye = enrichSnellenEyeFromBuffer("left");
+    const rightEye = enrichSnellenEyeFromBuffer("right");
     const allTimings = snellenLetterTimingsRef.current;
     const responseTimes = allTimings.map((t) => t.responseTime);
     const correctCount = allTimings.filter((t) => t.correct).length;
@@ -1363,29 +1527,30 @@ export default function TestPage() {
       (acuityToScore(leftEye.acuity) + acuityToScore(rightEye.acuity)) / 2
     );
 
-    const payload = {
-      leftEye,
-      rightEye,
-      timestamp: new Date().toISOString(),
-      overallScore,
-      accuracy,
-      avgResponseTime,
-      fastestResponse,
-      slowestResponse,
-      consistencyScore,
-      fatigueLevel,
-      sessionStability,
-      pauseCount: snellenPauseCountRef.current,
-      responseTimes,
-      levelProgression: snellenLevelProgressionRef.current,
-    };
-
     try {
-      await saveResultsToDB(payload);
-    } finally {
-      offerResultsWithSessionSummary(`/results/${testId || "snellen-acuity"}`, payload);
+      return finishSnellenWithResults({
+        leftEye,
+        rightEye,
+        timestamp: new Date().toISOString(),
+        overallScore,
+        accuracy,
+        avgResponseTime,
+        fastestResponse,
+        slowestResponse,
+        consistencyScore,
+        fatigueLevel,
+        sessionStability,
+        pauseCount: snellenPauseCountRef.current,
+        responseTimes,
+        levelProgression: snellenLevelProgressionRef.current,
+      });
+    } catch (err) {
+      console.error("[VISUAR] Snellen finalize error:", err);
+      snellenFinalizedRef.current = false;
+      finishingRef.current = false;
+      return false;
     }
-  }, [buildEyeRxFromBuffer, saveResultsToDB, offerResultsWithSessionSummary, testId]);
+  }, [backfillSnellenAcuityFromProgression, enrichSnellenEyeFromBuffer, finishSnellenWithResults]);
 
   const enrichJaegerEyePayload = useCallback((eye) => {
     const buf = refractionBufferRef.current[eye] || {};
@@ -1493,86 +1658,92 @@ export default function TestPage() {
     runAIAndPatchResult,
   ]);
 
-  const finalizeSnellenRef = useRef(null);
-  const finalizeJaegerRef = useRef(null);
 
   const handleAstigmatismComplete = useCallback(
     (result) => {
-      const eye = testingEyeRef.current;
-      refractionBufferRef.current[eye] = {
-        ...refractionBufferRef.current[eye],
-        cyl: result.cyl,
-        axis: result.axis,
-        allEqual: result.allEqual === true,
-      };
+      try {
+        const eye = result.eye ?? testingEye ?? testingEyeRef.current;
+        const tid = testIdRef.current || testId;
 
-      const advanceEyeOrFinish = (onBothEyesDone) => {
-        if (eye === "left") {
-          testingEyeRef.current = "right";
-          setTestingEye("right");
-          setRefractionEngineKey((k) => k + 1);
-          setTestPhase("INSTRUCTION");
-          return;
+        console.log(
+          `[VISUAR] astigmatism complete eye=${eye} test=${tid} snellenSub=${snellenSubPhaseRef.current}`
+        );
+
+        refractionBufferRef.current[eye] = {
+          ...refractionBufferRef.current[eye],
+          cyl: result.cyl,
+          axis: result.axis,
+          allEqual: result.allEqual === true,
+        };
+
+        const advanceEyeOrFinish = (onBothEyesDone) => {
+          const activeEye = result.eye ?? testingEye ?? testingEyeRef.current;
+          if (activeEye === "left") {
+            testingEyeRef.current = "right";
+            setTestingEye("right");
+            setRefractionEngineKey((k) => k + 1);
+            setTestPhase("INSTRUCTION");
+            return true;
+          }
+          const done = onBothEyesDone();
+          return done !== false;
+        };
+
+        const snellenSub = snellenSubPhaseRef.current;
+        const jaegerSub = jaegerSubPhaseRef.current;
+        const refractionSub = refractionSubPhaseRef.current;
+
+        // Standalone Snellen: astigmatism engine only mounts during this phase — no sub-phase guard.
+        if (tid === "snellen-acuity" || isSnellenTest) {
+          return advanceEyeOrFinish(finalizeStandaloneSnellenResults);
         }
-        onBothEyesDone();
-      };
 
-      if (isSnellenTest && snellenSubPhase === "astigmatism") {
-        advanceEyeOrFinish(() => finalizeSnellenRef.current?.());
-        return;
-      }
+        if (tid === "jaeger-acuity" && jaegerSub === "astigmatism") {
+          advanceEyeOrFinish(finalizeStandaloneJaegerResults);
+          return true;
+        }
 
-      if (isJaegerTest && jaegerSubPhase === "astigmatism") {
-        advanceEyeOrFinish(() => finalizeJaegerRef.current?.());
-        return;
-      }
+        if (tid === "refraction-battery" && refractionSub === "snellen" && snellenSub === "astigmatism") {
+          advanceEyeOrFinish(() => {
+            setSnellenSubPhase("acuity");
+            snellenSubPhaseRef.current = "acuity";
+            setRefractionSubPhase("duochrome");
+            setTestingEye("left");
+            setRefractionEngineKey((k) => k + 1);
+            setTestPhase("INSTRUCTION");
+          });
+          return true;
+        }
 
-      if (
-        isRefractionBattery &&
-        refractionSubPhase === "snellen" &&
-        snellenSubPhase === "astigmatism"
-      ) {
-        advanceEyeOrFinish(() => {
-          setSnellenSubPhase("acuity");
-          setRefractionSubPhase("duochrome");
-          setTestingEye("left");
-          setRefractionEngineKey((k) => k + 1);
-          setTestPhase("INSTRUCTION");
+        if (tid === "refraction-battery" && refractionSub === "jaeger" && jaegerSub === "astigmatism") {
+          advanceEyeOrFinish(() => {
+            setJaegerSubPhase("acuity");
+            jaegerSubPhaseRef.current = "acuity";
+            setRefractionSubPhase("near_far");
+            setNonSnellenResetToken((t) => t + 1);
+            setTestingEye("left");
+            setTestPhase("INSTRUCTION");
+          });
+          return true;
+        }
+
+        console.warn("[VISUAR] Astigmatism complete — no matching test branch", {
+          tid,
+          snellenSub,
+          jaegerSub,
+          refractionSub,
+          eye,
         });
-        return;
-      }
-
-      if (
-        isRefractionBattery &&
-        refractionSubPhase === "jaeger" &&
-        jaegerSubPhase === "astigmatism"
-      ) {
-        advanceEyeOrFinish(() => {
-          setJaegerSubPhase("acuity");
-          setRefractionSubPhase("near_far");
-          setNonSnellenResetToken((t) => t + 1);
-          setTestingEye("left");
-          setTestPhase("INSTRUCTION");
-        });
+        return false;
+      } catch (err) {
+        console.error("[VISUAR] Astigmatism complete handler error:", err);
+        finishingRef.current = false;
+        snellenFinalizedRef.current = false;
+        return false;
       }
     },
-    [
-      isSnellenTest,
-      snellenSubPhase,
-      isJaegerTest,
-      jaegerSubPhase,
-      isRefractionBattery,
-      refractionSubPhase,
-    ]
+    [testingEye, testId, isSnellenTest, finalizeStandaloneSnellenResults, finalizeStandaloneJaegerResults]
   );
-
-  useEffect(() => {
-    finalizeSnellenRef.current = finalizeStandaloneSnellenResults;
-  }, [finalizeStandaloneSnellenResults]);
-
-  useEffect(() => {
-    finalizeJaegerRef.current = finalizeStandaloneJaegerResults;
-  }, [finalizeStandaloneJaegerResults]);
 
   const resetForNextAssessmentStep = useCallback(() => {
     setTestingEye("left");
@@ -2354,50 +2525,48 @@ export default function TestPage() {
         setTestPhase("INSTRUCTION");
       } else {
         finishingRef.current = true;
-        beginSaving();
-
-        // Build full metrics from accumulated letter timings
-        const allTimings = snellenLetterTimingsRef.current;
-        const responseTimes = allTimings.map((t) => t.responseTime);
-        const correctCount = allTimings.filter((t) => t.correct).length;
-        const accuracy = allTimings.length > 0
-          ? Math.round((correctCount / allTimings.length) * 100)
-          : 0;
-        const avgResponseTime = responseTimes.length > 0
-          ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
-          : 0;
-        const fastestResponse = responseTimes.length > 0 ? Math.min(...responseTimes) : 0;
-        const slowestResponse = responseTimes.length > 0 ? Math.max(...responseTimes) : 0;
-        const consistencyScore = calcConsistencyScore(responseTimes);
-        const fatigueLevel = calcFatigueLevel(allTimings);
-        const sessionStability = calcSessionStability(snellenPauseCountRef.current);
-
-        const leftScore = acuityToScore(resultsRef.current.left?.acuity);
-        const rightScore = acuityToScore(resultsRef.current.right?.acuity);
-        const overallScore = Math.round((leftScore + rightScore) / 2);
-
-        const payload = {
-          leftEye: resultsRef.current.left,
-          rightEye: resultsRef.current.right,
-          timestamp: new Date().toISOString(),
-          // Analytics
-          overallScore,
-          accuracy,
-          avgResponseTime,
-          fastestResponse,
-          slowestResponse,
-          consistencyScore,
-          fatigueLevel,
-          sessionStability,
-          pauseCount: snellenPauseCountRef.current,
-          responseTimes,
-          levelProgression: snellenLevelProgressionRef.current,
-        };
-        console.log("[VISUAR] Test complete:", payload);
         try {
-          await saveResultsToDB(payload);
-        } finally {
-          offerResultsWithSessionSummary(`/results/${testId || "snellen-acuity"}`, payload);
+          // Build full metrics from accumulated letter timings
+          const allTimings = snellenLetterTimingsRef.current;
+          const responseTimes = allTimings.map((t) => t.responseTime);
+          const correctCount = allTimings.filter((t) => t.correct).length;
+          const accuracy = allTimings.length > 0
+            ? Math.round((correctCount / allTimings.length) * 100)
+            : 0;
+          const avgResponseTime = responseTimes.length > 0
+            ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+            : 0;
+          const fastestResponse = responseTimes.length > 0 ? Math.min(...responseTimes) : 0;
+          const slowestResponse = responseTimes.length > 0 ? Math.max(...responseTimes) : 0;
+          const consistencyScore = calcConsistencyScore(responseTimes);
+          const fatigueLevel = calcFatigueLevel(allTimings);
+          const sessionStability = calcSessionStability(snellenPauseCountRef.current);
+
+          const leftScore = acuityToScore(resultsRef.current.left?.acuity);
+          const rightScore = acuityToScore(resultsRef.current.right?.acuity);
+          const overallScore = Math.round((leftScore + rightScore) / 2);
+
+          const payload = {
+            leftEye: resultsRef.current.left,
+            rightEye: resultsRef.current.right,
+            timestamp: new Date().toISOString(),
+            overallScore,
+            accuracy,
+            avgResponseTime,
+            fastestResponse,
+            slowestResponse,
+            consistencyScore,
+            fatigueLevel,
+            sessionStability,
+            pauseCount: snellenPauseCountRef.current,
+            responseTimes,
+            levelProgression: snellenLevelProgressionRef.current,
+          };
+          console.log("[VISUAR] Test complete:", payload);
+          finishSnellenWithResults(payload);
+        } catch (err) {
+          console.error("[VISUAR] Snellen legacy finalize error:", err);
+          finishingRef.current = false;
         }
       }
     },
@@ -2405,8 +2574,7 @@ export default function TestPage() {
       testingEye,
       computeDiopter,
       testId,
-      saveResultsToDB,
-      offerResultsWithSessionSummary,
+      finishSnellenWithResults,
       isRefractionBattery,
       refractionBatteryVariant,
       refractionSubPhase,
@@ -3052,7 +3220,7 @@ export default function TestPage() {
           </div>
         )}
 
-        {isImplemented && testPhase === "SESSION_SUMMARY" && !sessionEstimate && pendingNavRef.current && (
+        {isImplemented && testPhase === "SESSION_SUMMARY" && !sessionEstimate && sessionSummaryNav && (
           <div
             className={`flex-1 flex flex-col items-center justify-center backdrop-blur-md rounded-3xl shadow-xl p-8 ${
               isDarkMode ? "bg-[#1a1f3a]/80 border border-slate-700/50" : "bg-white/80"
@@ -3064,7 +3232,7 @@ export default function TestPage() {
             <Button
               className="rounded-full bg-cyan-500 hover:bg-cyan-400 text-white px-8 h-12"
               onClick={() => {
-                const nav = pendingNavRef.current;
+                const nav = sessionSummaryNav || pendingNavRef.current;
                 if (nav) {
                   const slug = nav.path.replace(/^\/results\//, "");
                   if (slug) persistTestResult(slug, nav.state);
@@ -3454,8 +3622,8 @@ export default function TestPage() {
         )}
 
         {/* ═══ PHASE: ACTIVE TEST ═══ */}
-        {isImplemented && (
-          <div style={{ display: testPhase === "TESTING" ? "flex" : "none" }} className="gap-5 flex-1 min-h-0">
+        {isImplemented && testPhase === "TESTING" && (
+          <div className="gap-5 flex-1 min-h-0 flex">
             <div className={`flex-1 rounded-3xl shadow-xl flex flex-col items-center justify-center transition-colors overflow-hidden ${
               isDarkMode ? "bg-[#0d1117] border border-slate-800" : "bg-white border border-slate-200"
             }`}>
@@ -3611,6 +3779,7 @@ export default function TestPage() {
                     visionOk={testPhase === "TESTING" && isConditionsMet && !eyeWarningVisible}
                     onComplete={handleAstigmatismComplete}
                     showInstructions={testingEye === "left"}
+                    testingEye={testingEye}
                   />
                 </>
               )}
