@@ -8,7 +8,7 @@ import {
   formatFaintestContrastRead,
 } from "../utils/contrastResults";
 
-export const AI_ANALYSIS_TIMEOUT_MS = 20000;
+export const AI_ANALYSIS_TIMEOUT_MS = 60000;
 
 export const emptyAiAnalysis = () => ({
   findings: [],
